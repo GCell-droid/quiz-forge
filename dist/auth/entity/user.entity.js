@@ -17,14 +17,14 @@ var UserRole;
     UserRole["TEACHER"] = "teacher";
     UserRole["ADMIN"] = "admin";
 })(UserRole || (exports.UserRole = UserRole = {}));
-class UserEntity {
+let UserEntity = class UserEntity {
     id;
     email;
     name;
     password;
     role;
     createdAt;
-}
+};
 exports.UserEntity = UserEntity;
 __decorate([
     (0, typeorm_1.PrimaryGeneratedColumn)(),
@@ -54,4 +54,7 @@ __decorate([
     (0, typeorm_1.CreateDateColumn)(),
     __metadata("design:type", Date)
 ], UserEntity.prototype, "createdAt", void 0);
+exports.UserEntity = UserEntity = __decorate([
+    (0, typeorm_1.Entity)('user')
+], UserEntity);
 //# sourceMappingURL=user.entity.js.map

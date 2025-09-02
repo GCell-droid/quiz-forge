@@ -1,7 +1,7 @@
-/* eslint-disable @typescript-eslint/no-unsafe-call */
 import {
   IsEmail,
   IsNotEmpty,
+  IsOptional,
   IsString,
   IsStrongPassword,
 } from 'class-validator';
@@ -15,6 +15,7 @@ export class RegisterDTO {
   @IsNotEmpty({ message: 'Please provide password' })
   @IsStrongPassword({}, { message: 'Please provide strong password' })
   password: string;
+  @IsOptional()
   @IsNotEmpty()
   role: string;
 }

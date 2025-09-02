@@ -1,6 +1,7 @@
 import {
   Column,
   CreateDateColumn,
+  Entity,
   // OneToMany,
   PrimaryGeneratedColumn,
 } from 'typeorm';
@@ -10,6 +11,7 @@ export enum UserRole {
   TEACHER = 'teacher',
   ADMIN = 'admin',
 }
+@Entity('user')
 export class UserEntity {
   @PrimaryGeneratedColumn()
   id: number;

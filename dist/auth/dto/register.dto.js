@@ -33,6 +33,7 @@ __decorate([
     __metadata("design:type", String)
 ], RegisterDTO.prototype, "password", void 0);
 __decorate([
+    (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsNotEmpty)(),
     __metadata("design:type", String)
 ], RegisterDTO.prototype, "role", void 0);

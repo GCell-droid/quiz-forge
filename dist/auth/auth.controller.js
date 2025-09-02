@@ -8,10 +8,17 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
 var __metadata = (this && this.__metadata) || function (k, v) {
     if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
 };
+var __param = (this && this.__param) || function (paramIndex, decorator) {
+    return function (target, key) { decorator(target, key, paramIndex); }
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.AuthController = void 0;
 const common_1 = require("@nestjs/common");
 const auth_service_1 = require("./auth.service");
+const google_auth_guard_1 = require("./guards/google-auth/google-auth.guard");
+const login_dto_1 = require("./dto/login.dto");
+const register_dto_1 = require("./dto/register.dto");
+const combined_auth_guard_1 = require("./guards/combinedGuard/combined-auth.guard");
 let AuthController = class AuthController {
     authService;
     constructor(authService) {
@@ -20,14 +27,51 @@ let AuthController = class AuthController {
     serverTest() {
         return 'Server Running ';
     }
+    googleSignIn() { }
+    googleCallback() { }
+    login(logindto) {
+        return this.authService.login(logindto);
+    }
+    register(registerdto) {
+        return this.authService.register(registerdto);
+    }
 };
 exports.AuthController = AuthController;
 __decorate([
+    (0, common_1.UseGuards)(combined_auth_guard_1.JwtOrGoogleAuthGuard),
     (0, common_1.Get)('/test'),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", []),
     __metadata("design:returntype", void 0)
 ], AuthController.prototype, "serverTest", null);
+__decorate([
+    (0, common_1.UseGuards)(google_auth_guard_1.GoogleAuthGuard),
+    (0, common_1.Get)('/google'),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", []),
+    __metadata("design:returntype", void 0)
+], AuthController.prototype, "googleSignIn", null);
+__decorate([
+    (0, common_1.UseGuards)(google_auth_guard_1.GoogleAuthGuard),
+    (0, common_1.Get)('/google/callback'),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", []),
+    __metadata("design:returntype", void 0)
+], AuthController.prototype, "googleCallback", null);
+__decorate([
+    (0, common_1.Post)('login'),
+    __param(0, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [login_dto_1.LoginDto]),
+    __metadata("design:returntype", void 0)
+], AuthController.prototype, "login", null);
+__decorate([
+    (0, common_1.Post)('register'),
+    __param(0, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [register_dto_1.RegisterDTO]),
+    __metadata("design:returntype", void 0)
+], AuthController.prototype, "register", null);
 exports.AuthController = AuthController = __decorate([
     (0, common_1.Controller)('auth'),
     __metadata("design:paramtypes", [auth_service_1.AuthService])
