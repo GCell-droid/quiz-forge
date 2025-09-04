@@ -18,7 +18,7 @@ const auth_service_1 = require("./auth.service");
 const google_auth_guard_1 = require("./guards/google-auth/google-auth.guard");
 const login_dto_1 = require("./dto/login.dto");
 const register_dto_1 = require("./dto/register.dto");
-const combined_auth_guard_1 = require("./guards/combinedGuard/combined-auth.guard");
+const jwt_auth_guard_1 = require("./guards/jwtguard/jwt-auth.guard");
 let AuthController = class AuthController {
     authService;
     constructor(authService) {
@@ -29,8 +29,8 @@ let AuthController = class AuthController {
     }
     googleSignIn() { }
     googleCallback() { }
-    login(logindto) {
-        return this.authService.login(logindto);
+    login(logindto, request, response) {
+        return this.authService.login(logindto, request, response);
     }
     register(registerdto) {
         return this.authService.register(registerdto);
@@ -38,7 +38,7 @@ let AuthController = class AuthController {
 };
 exports.AuthController = AuthController;
 __decorate([
-    (0, common_1.UseGuards)(combined_auth_guard_1.JwtOrGoogleAuthGuard),
+    (0, common_1.UseGuards)(jwt_auth_guard_1.jwtAuthGuard),
     (0, common_1.Get)('/test'),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", []),
@@ -61,8 +61,10 @@ __decorate([
 __decorate([
     (0, common_1.Post)('login'),
     __param(0, (0, common_1.Body)()),
+    __param(1, (0, common_1.Req)()),
+    __param(2, (0, common_1.Res)({ passthrough: true })),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [login_dto_1.LoginDto]),
+    __metadata("design:paramtypes", [login_dto_1.LoginDto, Object, Object]),
     __metadata("design:returntype", void 0)
 ], AuthController.prototype, "login", null);
 __decorate([

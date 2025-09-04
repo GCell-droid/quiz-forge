@@ -53,20 +53,52 @@ let AuthService = class AuthService {
     async hashPassword(password) {
         return await bcrypt_1.default.hash(password, 10);
     }
-    async login(logindto) {
-        const user = await this.userRepository.findOne({
-            where: { email: logindto.email },
-        });
-        if (!user ||
-            !(await this.verifyPassword(logindto.password, user.password))) {
-            throw new common_1.UnauthorizedException('Invalid Credentials');
+    async login(logindto, request, res) {
+        try {
+            const token = request?.signedCookies?.jwt;
+            const payload = this.jwtService.verify(token, {
+                secret: this.configService.get('JWT_SECRET'),
+            });
+            const user = await this.userRepository.findOne({
+                where: { id: payload.sub },
+            });
+            if (user) {
+                const { password, ...result } = user;
+                return {
+                    message: 'Already logged',
+                    user: result,
+                };
+            }
         }
-        const tokens = this.generateToken(user);
-        const { password, ...result } = user;
-        return {
-            user: result,
-            ...tokens,
-        };
+        catch (err) {
+            const user = await this.userRepository.findOne({
+                where: { email: logindto.email },
+            });
+            if (!user ||
+                !(await this.verifyPassword(logindto.password, user.password))) {
+                throw new common_1.UnauthorizedException('Invalid Credentials');
+            }
+            const tokens = this.generateToken(user);
+            const { password, ...result } = user;
+            res.cookie('jwt', tokens.accessToken, {
+                httpOnly: true,
+                secure: process.env.NODE_ENV === 'production',
+                sameSite: 'strict',
+                maxAge: 24 * 60 * 1000,
+                signed: true,
+            });
+            res.cookie('refresh_token', tokens.refreshToken, {
+                httpOnly: true,
+                secure: process.env.NODE_ENV === 'production',
+                sameSite: 'strict',
+                maxAge: 7 * 24 * 60 * 60 * 1000,
+                signed: true,
+            });
+            return {
+                message: 'Login Sucess',
+                user: result,
+            };
+        }
     }
     async verifyPassword(password, dbpassword) {
         return await bcrypt_1.default.compare(password, dbpassword);

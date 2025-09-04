@@ -1,14 +1,23 @@
-import { Body, Controller, Get, Post, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Post,
+  Req,
+  Res,
+  UseGuards,
+} from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { GoogleAuthGuard } from './guards/google-auth/google-auth.guard';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDTO } from './dto/register.dto';
-import { JwtOrGoogleAuthGuard } from './guards/combinedGuard/combined-auth.guard';
+import type { Request, Response } from 'express';
+import { jwtAuthGuard } from './guards/jwtguard/jwt-auth.guard';
 
 @Controller('auth')
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
-  @UseGuards(JwtOrGoogleAuthGuard)
+  @UseGuards(jwtAuthGuard)
   @Get('/test')
   serverTest() {
     return 'Server Running ';
@@ -22,9 +31,14 @@ export class AuthController {
   googleCallback() {}
 
   @Post('login')
-  login(@Body() logindto: LoginDto) {
-    return this.authService.login(logindto);
+  login(
+    @Body() logindto: LoginDto,
+    @Req() request: Request,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    return this.authService.login(logindto, request, response);
   }
+
   @Post('register')
   register(@Body() registerdto: RegisterDTO) {
     return this.authService.register(registerdto);

@@ -5,6 +5,7 @@ import { ConfigService } from '@nestjs/config';
 import { RegisterDTO } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 import { GoogleRegisterDTO } from './dto/googleregistration.dto';
+import type { Request, Response } from 'express';
 export declare class AuthService {
     private readonly userRepository;
     private jwtService;
@@ -21,9 +22,8 @@ export declare class AuthService {
         message: string;
     }>;
     private hashPassword;
-    login(logindto: LoginDto): Promise<{
-        accessToken: string;
-        refreshToken: string;
+    login(logindto: LoginDto, request: Request, res: Response): Promise<{
+        message: string;
         user: {
             id: number;
             email: string;
@@ -31,7 +31,7 @@ export declare class AuthService {
             role: UserRole;
             createdAt: Date;
         };
-    }>;
+    } | undefined>;
     verifyPassword(password: string, dbpassword: string): Promise<boolean>;
     private generateToken;
     private generateAccessToken;

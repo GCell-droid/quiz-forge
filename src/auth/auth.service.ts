@@ -15,6 +15,7 @@ import { RegisterDTO } from './dto/register.dto';
 import bcrypt from 'bcrypt';
 import { LoginDto } from './dto/login.dto';
 import { GoogleRegisterDTO } from './dto/googleregistration.dto';
+import type { Request, Response } from 'express';
 @Injectable()
 export class AuthService {
   constructor(
@@ -46,23 +47,55 @@ export class AuthService {
   private async hashPassword(password: string): Promise<string> {
     return await bcrypt.hash(password, 10);
   }
-  async login(logindto: LoginDto) {
-    const user = await this.userRepository.findOne({
-      where: { email: logindto.email },
-    });
-    if (
-      !user ||
-      !(await this.verifyPassword(logindto.password, user.password))
-    ) {
-      throw new UnauthorizedException('Invalid Credentials');
+  async login(logindto: LoginDto, request: Request, res: Response) {
+    try {
+      const token = request?.signedCookies?.jwt;
+      const payload = this.jwtService.verify(token, {
+        secret: this.configService.get<string>('JWT_SECRET'),
+      });
+      const user = await this.userRepository.findOne({
+        where: { id: payload.sub },
+      });
+
+      if (user) {
+        const { password, ...result } = user;
+        return {
+          message: 'Already logged',
+          user: result,
+        };
+      }
+    } catch (err) {
+      const user = await this.userRepository.findOne({
+        where: { email: logindto.email },
+      });
+      if (
+        !user ||
+        !(await this.verifyPassword(logindto.password, user.password))
+      ) {
+        throw new UnauthorizedException('Invalid Credentials');
+      }
+      //generate tokens
+      const tokens = this.generateToken(user);
+      const { password, ...result } = user;
+      res.cookie('jwt', tokens.accessToken, {
+        httpOnly: true, // prevents JS access
+        secure: process.env.NODE_ENV === 'production', // only over HTTPS
+        sameSite: 'strict', // CSRF protection
+        maxAge: 24 * 60 * 1000, // 15 minutes
+        signed: true,
+      });
+      res.cookie('refresh_token', tokens.refreshToken, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'strict',
+        maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+        signed: true,
+      });
+      return {
+        message: 'Login Sucess',
+        user: result,
+      };
     }
-    //generate tokens
-    const tokens = this.generateToken(user);
-    const { password, ...result } = user;
-    return {
-      user: result,
-      ...tokens,
-    };
   }
   async verifyPassword(password: string, dbpassword: string): Promise<boolean> {
     return await bcrypt.compare(password, dbpassword);
