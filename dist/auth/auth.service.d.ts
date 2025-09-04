@@ -40,8 +40,6 @@ export declare class AuthService {
         accessToken: string;
     }>;
     validateGoogleUser(googleUser: GoogleRegisterDTO, role?: UserRole): Promise<{
-        accessToken: string;
-        refreshToken: string;
         user: {
             id: number;
             email: string;
@@ -49,11 +47,17 @@ export declare class AuthService {
             role: UserRole;
             createdAt: Date;
         };
+        tokens: {
+            accessToken: string;
+            refreshToken: string;
+        };
         needsRole?: undefined;
         email?: undefined;
     } | {
         needsRole: boolean;
         email: string;
+        user?: undefined;
+        tokens?: undefined;
     }>;
     getUserById(Userid: number): Promise<{
         id: number;
@@ -62,4 +66,5 @@ export declare class AuthService {
         role: UserRole;
         createdAt: Date;
     }>;
+    private setAuthCookies;
 }

@@ -15,25 +15,53 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.AuthController = void 0;
 const common_1 = require("@nestjs/common");
 const auth_service_1 = require("./auth.service");
-const google_auth_guard_1 = require("./guards/google-auth/google-auth.guard");
 const login_dto_1 = require("./dto/login.dto");
 const register_dto_1 = require("./dto/register.dto");
 const jwt_auth_guard_1 = require("./guards/jwtguard/jwt-auth.guard");
+const config_1 = require("@nestjs/config");
+const combined_auth_guard_1 = require("./guards/combinedGuard/combined-auth.guard");
 let AuthController = class AuthController {
     authService;
-    constructor(authService) {
+    configService;
+    constructor(authService, configService) {
         this.authService = authService;
+        this.configService = configService;
     }
     serverTest() {
         return 'Server Running ';
     }
     googleSignIn() { }
-    googleCallback() { }
+    googleCallback(req, res) {
+        const { user, tokens, needsRole, email } = req.user;
+        if (needsRole) {
+            return { needsRole: true, email };
+        }
+        res.cookie('jwt', tokens?.accessToken, {
+            httpOnly: true,
+            secure: false,
+            sameSite: 'strict',
+            signed: true,
+            maxAge: 15 * 60 * 1000,
+        });
+        res.cookie('refresh_token', tokens.refreshToken, {
+            httpOnly: true,
+            secure: false,
+            signed: true,
+            sameSite: 'strict',
+            maxAge: 7 * 24 * 60 * 60 * 1000,
+        });
+        return { message: 'Login successful', user };
+    }
     login(logindto, request, response) {
         return this.authService.login(logindto, request, response);
     }
     register(registerdto) {
         return this.authService.register(registerdto);
+    }
+    logout(res) {
+        res.clearCookie('jwt');
+        res.clearCookie('refresh_token');
+        return res.send({ message: 'Logged out' });
     }
 };
 exports.AuthController = AuthController;
@@ -45,17 +73,19 @@ __decorate([
     __metadata("design:returntype", void 0)
 ], AuthController.prototype, "serverTest", null);
 __decorate([
-    (0, common_1.UseGuards)(google_auth_guard_1.GoogleAuthGuard),
+    (0, common_1.UseGuards)(combined_auth_guard_1.GoogleOrJwtAuthGuard),
     (0, common_1.Get)('/google'),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", []),
     __metadata("design:returntype", void 0)
 ], AuthController.prototype, "googleSignIn", null);
 __decorate([
-    (0, common_1.UseGuards)(google_auth_guard_1.GoogleAuthGuard),
+    (0, common_1.UseGuards)(combined_auth_guard_1.GoogleOrJwtAuthGuard),
     (0, common_1.Get)('/google/callback'),
+    __param(0, (0, common_1.Req)()),
+    __param(1, (0, common_1.Res)({ passthrough: true })),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", []),
+    __metadata("design:paramtypes", [Object, Object]),
     __metadata("design:returntype", void 0)
 ], AuthController.prototype, "googleCallback", null);
 __decorate([
@@ -74,8 +104,17 @@ __decorate([
     __metadata("design:paramtypes", [register_dto_1.RegisterDTO]),
     __metadata("design:returntype", void 0)
 ], AuthController.prototype, "register", null);
+__decorate([
+    (0, common_1.UseGuards)(jwt_auth_guard_1.jwtAuthGuard),
+    (0, common_1.Get)('logout'),
+    __param(0, (0, common_1.Res)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object]),
+    __metadata("design:returntype", void 0)
+], AuthController.prototype, "logout", null);
 exports.AuthController = AuthController = __decorate([
     (0, common_1.Controller)('auth'),
-    __metadata("design:paramtypes", [auth_service_1.AuthService])
+    __metadata("design:paramtypes", [auth_service_1.AuthService,
+        config_1.ConfigService])
 ], AuthController);
 //# sourceMappingURL=auth.controller.js.map

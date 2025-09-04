@@ -77,20 +77,7 @@ export class AuthService {
       //generate tokens
       const tokens = this.generateToken(user);
       const { password, ...result } = user;
-      res.cookie('jwt', tokens.accessToken, {
-        httpOnly: true, // prevents JS access
-        secure: process.env.NODE_ENV === 'production', // only over HTTPS
-        sameSite: 'strict', // CSRF protection
-        maxAge: 24 * 60 * 1000, // 15 minutes
-        signed: true,
-      });
-      res.cookie('refresh_token', tokens.refreshToken, {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: 'strict',
-        maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
-        signed: true,
-      });
+      this.setAuthCookies(tokens, res);
       return {
         message: 'Login Sucess',
         user: result,
@@ -151,38 +138,35 @@ export class AuthService {
   }
 
   async validateGoogleUser(googleUser: GoogleRegisterDTO, role?: UserRole) {
-    // 1. check if user exists
     const existingUser = await this.userRepository.findOne({
       where: { email: googleUser.email },
     });
 
     if (existingUser) {
-      // Already registered → return tokens with saved role
-      const tokens = this.generateToken(existingUser);
       const { password, ...result } = existingUser;
-      return { user: result, ...tokens };
+      const tokens = this.generateToken(existingUser);
+      return { user: result, tokens };
     }
 
-    // 2. If user doesn’t exist → wait for role from frontend
     if (!role) {
-      // Here you can send a flag back telling frontend:
-      // "User is new, ask them to pick Student/Teacher role"
+      // return a consistent object
       return { needsRole: true, email: googleUser.email };
     }
 
-    // 3. Save new user with selected role
+    // Save new user with selected role
     const newUser = this.userRepository.create({
       name: googleUser.name,
       email: googleUser.email,
-      password: '', // OAuth users don’t need password
-      role: role,
+      password: '',
+      role,
     });
     const savedUser = await this.userRepository.save(newUser);
 
-    const tokens = this.generateToken(savedUser);
     const { password, ...result } = savedUser;
-    return { user: result, ...tokens };
+    const tokens = this.generateToken(savedUser);
+    return { user: result, tokens };
   }
+
   async getUserById(Userid: number) {
     const user = await this.userRepository.findOne({ where: { id: Userid } });
     if (!user) {
@@ -190,5 +174,26 @@ export class AuthService {
     }
     const { password, ...result } = user;
     return result;
+  }
+
+  private setAuthCookies(
+    tokens: { accessToken: string; refreshToken: string },
+    res: Response,
+  ) {
+    res.cookie('jwt', tokens.accessToken, {
+      httpOnly: true,
+      secure: false,
+      sameSite: 'strict',
+      maxAge: 15 * 60 * 1000, // 15 minutes
+      signed: true,
+    });
+
+    res.cookie('refresh_token', tokens.refreshToken, {
+      httpOnly: true,
+      secure: false,
+      sameSite: 'strict',
+      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+      signed: true,
+    });
   }
 }

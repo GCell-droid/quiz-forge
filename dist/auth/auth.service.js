@@ -80,20 +80,7 @@ let AuthService = class AuthService {
             }
             const tokens = this.generateToken(user);
             const { password, ...result } = user;
-            res.cookie('jwt', tokens.accessToken, {
-                httpOnly: true,
-                secure: process.env.NODE_ENV === 'production',
-                sameSite: 'strict',
-                maxAge: 24 * 60 * 1000,
-                signed: true,
-            });
-            res.cookie('refresh_token', tokens.refreshToken, {
-                httpOnly: true,
-                secure: process.env.NODE_ENV === 'production',
-                sameSite: 'strict',
-                maxAge: 7 * 24 * 60 * 60 * 1000,
-                signed: true,
-            });
+            this.setAuthCookies(tokens, res);
             return {
                 message: 'Login Sucess',
                 user: result,
@@ -157,9 +144,9 @@ let AuthService = class AuthService {
             where: { email: googleUser.email },
         });
         if (existingUser) {
-            const tokens = this.generateToken(existingUser);
             const { password, ...result } = existingUser;
-            return { user: result, ...tokens };
+            const tokens = this.generateToken(existingUser);
+            return { user: result, tokens };
         }
         if (!role) {
             return { needsRole: true, email: googleUser.email };
@@ -168,12 +155,12 @@ let AuthService = class AuthService {
             name: googleUser.name,
             email: googleUser.email,
             password: '',
-            role: role,
+            role,
         });
         const savedUser = await this.userRepository.save(newUser);
-        const tokens = this.generateToken(savedUser);
         const { password, ...result } = savedUser;
-        return { user: result, ...tokens };
+        const tokens = this.generateToken(savedUser);
+        return { user: result, tokens };
     }
     async getUserById(Userid) {
         const user = await this.userRepository.findOne({ where: { id: Userid } });
@@ -182,6 +169,22 @@ let AuthService = class AuthService {
         }
         const { password, ...result } = user;
         return result;
+    }
+    setAuthCookies(tokens, res) {
+        res.cookie('jwt', tokens.accessToken, {
+            httpOnly: true,
+            secure: false,
+            sameSite: 'strict',
+            maxAge: 15 * 60 * 1000,
+            signed: true,
+        });
+        res.cookie('refresh_token', tokens.refreshToken, {
+            httpOnly: true,
+            secure: false,
+            sameSite: 'strict',
+            maxAge: 7 * 24 * 60 * 60 * 1000,
+            signed: true,
+        });
     }
 };
 exports.AuthService = AuthService;
