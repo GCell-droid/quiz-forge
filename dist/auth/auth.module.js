@@ -21,6 +21,9 @@ const user_entity_1 = require("./entity/user.entity");
 const passport_1 = require("@nestjs/passport");
 const jwt_1 = require("@nestjs/jwt");
 const jwt_strategy_1 = require("./strategy/jwt-strategy");
+const roles_guard_1 = require("./guards/roles-guard/roles.guard");
+const jwt_auth_guard_1 = require("./guards/jwtguard/jwt-auth.guard");
+const combined_auth_guard_1 = require("./guards/combinedGuard/combined-auth.guard");
 let AuthModule = class AuthModule {
 };
 exports.AuthModule = AuthModule;
@@ -33,8 +36,15 @@ exports.AuthModule = AuthModule = __decorate([
             jwt_1.JwtModule.register({}),
         ],
         controllers: [auth_controller_1.AuthController],
-        providers: [auth_service_1.AuthService, google_strategy_1.GoogleStrategy, jwt_strategy_1.JwtStrategy],
-        exports: [auth_service_1.AuthService],
+        providers: [
+            auth_service_1.AuthService,
+            google_strategy_1.GoogleStrategy,
+            jwt_strategy_1.JwtStrategy,
+            roles_guard_1.RoleGuard,
+            jwt_auth_guard_1.jwtAuthGuard,
+            combined_auth_guard_1.GoogleOrJwtAuthGuard,
+        ],
+        exports: [auth_service_1.AuthService, roles_guard_1.RoleGuard, jwt_auth_guard_1.jwtAuthGuard, combined_auth_guard_1.GoogleOrJwtAuthGuard],
     })
 ], AuthModule);
 //# sourceMappingURL=auth.module.js.map

@@ -29,6 +29,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
   }
 
   async validate(payload: any) {
+    //payload is basically decoded token
     if (!payload || !payload?.role || !payload?.sub) {
       throw new UnauthorizedException('Invalid Token');
     }
@@ -39,7 +40,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
 
     return {
       ...user,
-      role: payload.role, // user or admin
+      role: user.role, // user or admin
     };
   }
 }

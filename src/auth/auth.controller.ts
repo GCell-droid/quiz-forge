@@ -10,13 +10,15 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { AuthService } from './auth.service';
-import { GoogleAuthGuard } from './guards/google-auth/google-auth.guard';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDTO } from './dto/register.dto';
 import type { Request, Response } from 'express';
 import { jwtAuthGuard } from './guards/jwtguard/jwt-auth.guard';
 import { ConfigService } from '@nestjs/config';
 import { GoogleOrJwtAuthGuard } from './guards/combinedGuard/combined-auth.guard';
+import { Roles } from './decorators/roles.decorator';
+import { UserRole } from './entity/user.entity';
+import { RoleGuard } from './guards/roles-guard/roles.guard';
 
 @Controller('auth')
 export class AuthController {
@@ -24,7 +26,8 @@ export class AuthController {
     private readonly authService: AuthService,
     private readonly configService: ConfigService,
   ) {}
-  @UseGuards(jwtAuthGuard)
+  @Roles(UserRole.ADMIN) //set roles metadata that is required
+  @UseGuards(jwtAuthGuard, RoleGuard)
   @Get('/test')
   serverTest() {
     return 'Server Running ';

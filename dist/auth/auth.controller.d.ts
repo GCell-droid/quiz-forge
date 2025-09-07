@@ -3,6 +3,7 @@ import { LoginDto } from './dto/login.dto';
 import { RegisterDTO } from './dto/register.dto';
 import type { Request, Response } from 'express';
 import { ConfigService } from '@nestjs/config';
+import { UserRole } from './entity/user.entity';
 export declare class AuthController {
     private readonly authService;
     private readonly configService;
@@ -26,7 +27,7 @@ export declare class AuthController {
             id: number;
             email: string;
             name: string;
-            role: import("./entity/user.entity").UserRole;
+            role: UserRole;
             createdAt: Date;
         };
     } | undefined>;
@@ -35,7 +36,7 @@ export declare class AuthController {
             id: number;
             email: string;
             name: string;
-            role: import("./entity/user.entity").UserRole;
+            role: UserRole;
             createdAt: Date;
         };
         message: string;

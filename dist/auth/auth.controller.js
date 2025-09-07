@@ -20,6 +20,9 @@ const register_dto_1 = require("./dto/register.dto");
 const jwt_auth_guard_1 = require("./guards/jwtguard/jwt-auth.guard");
 const config_1 = require("@nestjs/config");
 const combined_auth_guard_1 = require("./guards/combinedGuard/combined-auth.guard");
+const roles_decorator_1 = require("./decorators/roles.decorator");
+const user_entity_1 = require("./entity/user.entity");
+const roles_guard_1 = require("./guards/roles-guard/roles.guard");
 let AuthController = class AuthController {
     authService;
     configService;
@@ -66,7 +69,8 @@ let AuthController = class AuthController {
 };
 exports.AuthController = AuthController;
 __decorate([
-    (0, common_1.UseGuards)(jwt_auth_guard_1.jwtAuthGuard),
+    (0, roles_decorator_1.Roles)(user_entity_1.UserRole.ADMIN),
+    (0, common_1.UseGuards)(jwt_auth_guard_1.jwtAuthGuard, roles_guard_1.RoleGuard),
     (0, common_1.Get)('/test'),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", []),
