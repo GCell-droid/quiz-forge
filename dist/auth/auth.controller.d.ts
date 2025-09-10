@@ -28,6 +28,9 @@ export declare class AuthController {
             email: string;
             name: string;
             role: UserRole;
+            quizzes: import("../quiz/entites/quiz.entity").QuizEntity[];
+            answers: import("../quiz/entites/answer.entity").AnswerEntity[];
+            sessions: import("../quiz/entites/quizsession.entity").QuizSessionEntity[];
             createdAt: Date;
         };
     } | undefined>;
@@ -37,6 +40,9 @@ export declare class AuthController {
             email: string;
             name: string;
             role: UserRole;
+            quizzes: import("../quiz/entites/quiz.entity").QuizEntity[];
+            answers: import("../quiz/entites/answer.entity").AnswerEntity[];
+            sessions: import("../quiz/entites/quizsession.entity").QuizSessionEntity[];
             createdAt: Date;
         };
         message: string;

@@ -10,6 +10,9 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.UserEntity = exports.UserRole = void 0;
+const answer_entity_1 = require("../../quiz/entites/answer.entity");
+const quiz_entity_1 = require("../../quiz/entites/quiz.entity");
+const quizsession_entity_1 = require("../../quiz/entites/quizsession.entity");
 const typeorm_1 = require("typeorm");
 var UserRole;
 (function (UserRole) {
@@ -23,6 +26,9 @@ let UserEntity = class UserEntity {
     name;
     password;
     role;
+    quizzes;
+    answers;
+    sessions;
     createdAt;
 };
 exports.UserEntity = UserEntity;
@@ -50,6 +56,18 @@ __decorate([
     }),
     __metadata("design:type", String)
 ], UserEntity.prototype, "role", void 0);
+__decorate([
+    (0, typeorm_1.OneToMany)(() => quiz_entity_1.QuizEntity, (quiz) => quiz.author),
+    __metadata("design:type", Array)
+], UserEntity.prototype, "quizzes", void 0);
+__decorate([
+    (0, typeorm_1.OneToMany)(() => answer_entity_1.AnswerEntity, (answer) => answer.student),
+    __metadata("design:type", Array)
+], UserEntity.prototype, "answers", void 0);
+__decorate([
+    (0, typeorm_1.ManyToMany)(() => quizsession_entity_1.QuizSessionEntity, (session) => session.allowedStudents),
+    __metadata("design:type", Array)
+], UserEntity.prototype, "sessions", void 0);
 __decorate([
     (0, typeorm_1.CreateDateColumn)(),
     __metadata("design:type", Date)

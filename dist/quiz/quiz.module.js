@@ -8,15 +8,30 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.QuizModule = void 0;
 const common_1 = require("@nestjs/common");
-const quiz_controller_1 = require("./quiz.controller");
+const typeorm_1 = require("@nestjs/typeorm");
 const quiz_service_1 = require("./quiz.service");
+const quiz_controller_1 = require("./quiz.controller");
+const user_entity_1 = require("../auth/entity/user.entity");
+const quiz_entity_1 = require("./entites/quiz.entity");
+const question_entity_1 = require("./entites/question.entity");
+const answer_entity_1 = require("./entites/answer.entity");
+const quizsession_entity_1 = require("./entites/quizsession.entity");
 let QuizModule = class QuizModule {
 };
 exports.QuizModule = QuizModule;
 exports.QuizModule = QuizModule = __decorate([
     (0, common_1.Module)({
-        controllers: [quiz_controller_1.QuizController],
+        imports: [
+            typeorm_1.TypeOrmModule.forFeature([
+                quiz_entity_1.QuizEntity,
+                question_entity_1.QuestionEntity,
+                answer_entity_1.AnswerEntity,
+                quizsession_entity_1.QuizSessionEntity,
+                user_entity_1.UserEntity,
+            ]),
+        ],
         providers: [quiz_service_1.QuizService],
+        controllers: [quiz_controller_1.QuizController],
     })
 ], QuizModule);
 //# sourceMappingURL=quiz.module.js.map

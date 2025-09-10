@@ -17,6 +17,9 @@ export declare class AuthService {
             email: string;
             name: string;
             role: UserRole;
+            quizzes: import("../quiz/entites/quiz.entity").QuizEntity[];
+            answers: import("../quiz/entites/answer.entity").AnswerEntity[];
+            sessions: import("../quiz/entites/quizsession.entity").QuizSessionEntity[];
             createdAt: Date;
         };
         message: string;
@@ -29,6 +32,9 @@ export declare class AuthService {
             email: string;
             name: string;
             role: UserRole;
+            quizzes: import("../quiz/entites/quiz.entity").QuizEntity[];
+            answers: import("../quiz/entites/answer.entity").AnswerEntity[];
+            sessions: import("../quiz/entites/quizsession.entity").QuizSessionEntity[];
             createdAt: Date;
         };
     } | undefined>;
@@ -45,6 +51,9 @@ export declare class AuthService {
             email: string;
             name: string;
             role: UserRole;
+            quizzes: import("../quiz/entites/quiz.entity").QuizEntity[];
+            answers: import("../quiz/entites/answer.entity").AnswerEntity[];
+            sessions: import("../quiz/entites/quizsession.entity").QuizSessionEntity[];
             createdAt: Date;
         };
         tokens: {
@@ -64,6 +73,9 @@ export declare class AuthService {
         email: string;
         name: string;
         role: UserRole;
+        quizzes: import("../quiz/entites/quiz.entity").QuizEntity[];
+        answers: import("../quiz/entites/answer.entity").AnswerEntity[];
+        sessions: import("../quiz/entites/quizsession.entity").QuizSessionEntity[];
         createdAt: Date;
     }>;
     private setAuthCookies;

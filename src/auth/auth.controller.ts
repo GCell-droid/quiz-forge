@@ -26,7 +26,7 @@ export class AuthController {
     private readonly authService: AuthService,
     private readonly configService: ConfigService,
   ) {}
-  @Roles(UserRole.ADMIN) //set roles metadata that is required
+  @Roles(UserRole.TEACHER) //set roles metadata that is required
   @UseGuards(jwtAuthGuard, RoleGuard)
   @Get('/test')
   serverTest() {
