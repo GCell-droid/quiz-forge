@@ -20,6 +20,7 @@ let QuestionEntity = class QuestionEntity {
     correctAnswerIndex;
     quiz;
     answers;
+    marks;
 };
 exports.QuestionEntity = QuestionEntity;
 __decorate([
@@ -48,6 +49,10 @@ __decorate([
     (0, typeorm_1.OneToMany)(() => answer_entity_1.AnswerEntity, (a) => a.question),
     __metadata("design:type", Array)
 ], QuestionEntity.prototype, "answers", void 0);
+__decorate([
+    (0, typeorm_1.Column)(),
+    __metadata("design:type", Number)
+], QuestionEntity.prototype, "marks", void 0);
 exports.QuestionEntity = QuestionEntity = __decorate([
     (0, typeorm_1.Entity)('question')
 ], QuestionEntity);

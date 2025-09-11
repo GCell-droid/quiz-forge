@@ -10,11 +10,11 @@ const cookie_parser_1 = __importDefault(require("cookie-parser"));
 async function bootstrap() {
     const app = await core_1.NestFactory.create(app_module_1.AppModule);
     app.use((0, cookie_parser_1.default)(process.env.COOKIE_SECRET));
-    app.useGlobalPipes(new common_1.ValidationPipe({ whitelist: true, transform: true }));
     app.useGlobalPipes(new common_1.ValidationPipe({
         whitelist: true,
         forbidNonWhitelisted: true,
         transform: true,
+        transformOptions: { enableImplicitConversion: true },
         disableErrorMessages: false,
     }));
     await app.listen(process.env.PORT ?? 3000);

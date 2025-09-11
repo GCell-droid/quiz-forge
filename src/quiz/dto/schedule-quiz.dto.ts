@@ -2,19 +2,18 @@ import { IsInt, IsArray, IsOptional, IsDateString } from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class ScheduleQuizDto {
+  @Type(() => Number)
   @IsInt()
-  @Type(() => Number) // converts string to number from JSON body
   quizId: number;
 
   @IsDateString()
-  scheduledStartTime: string; // JSON string in ISO 8601
+  scheduledStartTime: string; // keep as string (class-validator expects string)
 
   @IsDateString()
-  scheduledEndTime: string; // JSON string in ISO 8601
+  scheduledEndTime: string;
 
   @IsOptional()
   @IsArray()
-  @IsInt({ each: true })
-  @Type(() => Number) // converts array of string numbers to integers
+  @Type(() => Number)
   allowedStudents?: number[];
 }

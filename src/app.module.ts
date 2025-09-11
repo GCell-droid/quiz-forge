@@ -4,6 +4,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { ConfigModule } from '@nestjs/config';
 import { AuthModule } from './auth/auth.module';
 import { QuizModule } from './quiz/quiz.module';
+import { StudentSideModule } from './student-side/student-side.module';
 
 @Module({
   imports: [
@@ -13,11 +14,12 @@ import { QuizModule } from './quiz/quiz.module';
       url: process.env.DB_URL,
       ssl: true,
       autoLoadEntities: true,
-      synchronize: true,
+      synchronize: true, //do it false in production
     }),
     ScheduleModule.forRoot(),
     AuthModule,
     QuizModule,
+    StudentSideModule,
   ],
 })
 export class AppModule {}

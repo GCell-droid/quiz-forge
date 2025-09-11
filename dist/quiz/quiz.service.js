@@ -22,6 +22,7 @@ const user_entity_1 = require("../auth/entity/user.entity");
 const quiz_entity_1 = require("./entites/quiz.entity");
 const question_entity_1 = require("./entites/question.entity");
 const quizsession_entity_1 = require("./entites/quizsession.entity");
+const crypto_1 = require("crypto");
 let QuizService = class QuizService {
     quizRepo;
     questionRepo;
@@ -43,6 +44,7 @@ let QuizService = class QuizService {
             text: q.text,
             options: q.options,
             correctAnswerIndex: q.correctAnswerIndex,
+            marks: q.marks,
         }));
         const quiz = this.quizRepo.create({
             title: dto.title,
@@ -55,39 +57,59 @@ let QuizService = class QuizService {
         return this.quizRepo.save(quiz);
     }
     async scheduleQuiz(dto, teacherId) {
-        const teacher = await this.userRepo.findOneBy({ id: teacherId });
-        if (!teacher)
-            throw new common_1.NotFoundException('Teacher not found');
-        const quiz = await this.quizRepo.findOne({
-            where: { id: dto.quizId },
-            relations: ['questions'],
-        });
-        if (!quiz)
-            throw new common_1.NotFoundException('Quiz not found');
-        const session = this.sessionRepo.create({
-            quiz,
-            teacher,
-            isActive: false,
-            startedAt: new Date(dto.scheduledStartTime),
-            endedAt: new Date(dto.scheduledEndTime),
-        });
-        if (dto.allowedStudents?.length) {
-            session.allowedStudents = await this.userRepo.findBy({
-                id: (0, typeorm_2.In)(dto.allowedStudents),
+        try {
+            const teacher = await this.userRepo.findOneBy({ id: teacherId });
+            if (!teacher)
+                throw new common_1.NotFoundException('Teacher not found');
+            const quiz = await this.quizRepo.findOne({
+                where: { id: dto.quizId },
+                relations: ['questions'],
             });
+            if (!quiz)
+                throw new common_1.NotFoundException('Quiz not found');
+            const conflict = await this.sessionRepo.findOne({
+                where: {
+                    quiz: { id: dto.quizId },
+                    scheduledStartTime: (0, typeorm_2.LessThanOrEqual)(new Date(dto.scheduledEndTime)),
+                    scheduledEndTime: (0, typeorm_2.MoreThanOrEqual)(new Date(dto.scheduledStartTime)),
+                },
+            });
+            if (conflict) {
+                throw new common_1.BadRequestException(`This quiz already has a session scheduled between ${conflict.scheduledStartTime.toISOString()} and ${conflict.scheduledEndTime.toISOString()}`);
+            }
+            const joinCode = (0, crypto_1.randomBytes)(3).toString('hex').toUpperCase();
+            const session = this.sessionRepo.create({
+                quiz,
+                teacher,
+                joinCode,
+                scheduledStartTime: new Date(dto.scheduledStartTime),
+                scheduledEndTime: new Date(dto.scheduledEndTime),
+                isActive: false,
+            });
+            if (dto.allowedStudents?.length) {
+                session.allowedStudents = await this.userRepo.findBy({
+                    id: (0, typeorm_2.In)(dto.allowedStudents),
+                });
+            }
+            const savedSession = await this.sessionRepo.save(session);
+            this.addCronJob(`start-${savedSession.id}`, new Date(dto.scheduledStartTime), async () => {
+                savedSession.isActive = true;
+                savedSession.startedAt = new Date();
+                await this.sessionRepo.save(savedSession);
+            });
+            this.addCronJob(`end-${savedSession.id}`, new Date(dto.scheduledEndTime), async () => {
+                savedSession.isActive = false;
+                savedSession.endedAt = new Date();
+                await this.sessionRepo.save(savedSession);
+            });
+            return savedSession;
         }
-        const savedSession = await this.sessionRepo.save(session);
-        this.addCronJob(`start-${savedSession.id}`, new Date(dto.scheduledStartTime), async () => {
-            savedSession.isActive = true;
-            await this.sessionRepo.save(savedSession);
-            console.log(`Quiz Session ${savedSession.id} started`);
-        });
-        this.addCronJob(`end-${savedSession.id}`, new Date(dto.scheduledEndTime), async () => {
-            savedSession.isActive = false;
-            await this.sessionRepo.save(savedSession);
-            console.log(`Quiz Session ${savedSession.id} ended`);
-        });
-        return savedSession;
+        catch (e) {
+            if (e instanceof common_1.NotFoundException || e instanceof common_1.BadRequestException) {
+                throw e;
+            }
+            throw new common_1.InternalServerErrorException(e.message);
+        }
     }
     async getQuiz(quizId) {
         const quiz = await this.quizRepo.findOne({

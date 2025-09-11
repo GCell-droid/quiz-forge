@@ -29,4 +29,7 @@ export class QuestionEntity {
 
   @OneToMany(() => AnswerEntity, (a) => a.question)
   answers: AnswerEntity[];
+
+  @Column()
+  marks: number;
 }
