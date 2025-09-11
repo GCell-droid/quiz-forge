@@ -13,6 +13,7 @@ const typeorm_1 = require("@nestjs/typeorm");
 const config_1 = require("@nestjs/config");
 const auth_module_1 = require("./auth/auth.module");
 const quiz_module_1 = require("./quiz/quiz.module");
+const student_side_module_1 = require("./student-side/student-side.module");
 let AppModule = class AppModule {
 };
 exports.AppModule = AppModule;
@@ -30,6 +31,7 @@ exports.AppModule = AppModule = __decorate([
             schedule_1.ScheduleModule.forRoot(),
             auth_module_1.AuthModule,
             quiz_module_1.QuizModule,
+            student_side_module_1.StudentSideModule,
         ],
     })
 ], AppModule);

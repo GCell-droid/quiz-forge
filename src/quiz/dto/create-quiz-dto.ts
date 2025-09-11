@@ -20,6 +20,9 @@ export class CreateQuestionDto {
   @IsInt()
   @Min(0)
   correctAnswerIndex: number;
+
+  @IsInt()
+  marks: number;
 }
 
 export class CreateQuizDto {

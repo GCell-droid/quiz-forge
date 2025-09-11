@@ -7,4 +7,5 @@ export declare class QuestionEntity {
     correctAnswerIndex: number;
     quiz: QuizEntity;
     answers: AnswerEntity[];
+    marks: number;
 }

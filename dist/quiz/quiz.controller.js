@@ -27,12 +27,16 @@ let QuizController = class QuizController {
         this.quizService = quizService;
     }
     async createQuiz(dto, req) {
-        const teacherId = req.user.id;
+        const teacherId = req?.user?.id;
         return this.quizService.createQuiz(dto, teacherId);
     }
-    async scheduleQuiz(dto, req) {
+    async scheduleQuiz(schdto, req) {
+        console.log(schdto);
         const teacherId = req?.user?.id;
-        return this.quizService.scheduleQuiz(dto, teacherId);
+        return this.quizService.scheduleQuiz(schdto, teacherId);
+    }
+    async getQuiz(quizId) {
+        return this.quizService.getQuiz(quizId);
     }
 };
 exports.QuizController = QuizController;
@@ -54,6 +58,13 @@ __decorate([
     __metadata("design:paramtypes", [schedule_quiz_dto_1.ScheduleQuizDto, Object]),
     __metadata("design:returntype", Promise)
 ], QuizController.prototype, "scheduleQuiz", null);
+__decorate([
+    (0, common_1.Get)(':id'),
+    __param(0, (0, common_1.Param)('id', common_1.ParseIntPipe)),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Number]),
+    __metadata("design:returntype", Promise)
+], QuizController.prototype, "getQuiz", null);
 exports.QuizController = QuizController = __decorate([
     (0, common_1.Controller)('quiz'),
     (0, common_1.UseGuards)(jwt_auth_guard_1.jwtAuthGuard, roles_guard_1.RoleGuard),
