@@ -1,3 +1,4 @@
+// src/quiz/quiz.module.ts
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { QuizService } from './quiz.service';
@@ -7,6 +8,7 @@ import { QuizEntity } from './entites/quiz.entity';
 import { QuestionEntity } from './entites/question.entity';
 import { AnswerEntity } from './entites/answer.entity';
 import { QuizSessionEntity } from './entites/quizsession.entity';
+import { QuizGateway } from './gateway/quiz.gateway';
 
 @Module({
   imports: [
@@ -18,7 +20,8 @@ import { QuizSessionEntity } from './entites/quizsession.entity';
       UserEntity,
     ]),
   ],
-  providers: [QuizService],
+  providers: [QuizService, QuizGateway],
   controllers: [QuizController],
+  exports: [QuizService], // export if used outside
 })
 export class QuizModule {}
