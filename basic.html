@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Quiz Socket Test</title>
+    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+</head>
+
+<body>
+    <h2>Quiz Socket Test</h2>
+
+    <!-- Login Section -->
+    <div>
+        <h3>Login</h3>
+        <input type="text" id="username" placeholder="Username">
+        <input type="password" id="password" placeholder="Password">
+        <button onclick="login()">Login</button>
+        <p id="loginStatus"></p>
+    </div>
+
+    <!-- Join Quiz Section -->
+    <div>
+        <h3>Join Quiz</h3>
+        <input type="text" id="joinCode" placeholder="Enter Quiz Join Code">
+        <button onclick="joinQuiz()">Join Quiz</button>
+        <p id="quizStatus"></p>
+    </div>
+
+    <!-- Submit Answer Section -->
+    <div>
+        <h3>Submit Answer</h3>
+        <input type="number" id="sessionId" placeholder="Session ID">
+        <input type="number" id="questionId" placeholder="Question ID">
+        <input type="number" id="selectedOption" placeholder="Selected Option Index">
+        <button onclick="submitAnswer()">Submit Answer</button>
+        <p id="answerStatus"></p>
+    </div>
+
+    <script>
+        let jwtToken = null;
+        let socket = null;
+
+        // Replace with your backend API URL for login
+        const API_URL = 'http://localhost:7777';
+
+        async function login() {
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+
+            try {
+                const res = await fetch(`${API_URL}/auth/login`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username, password })
+                });
+                const data = await res.json();
+                if (res.ok) {
+                    jwtToken = data.accessToken || data.token; // adjust based on your backend response
+                    document.getElementById('loginStatus').innerText = 'Login successful!';
+                    console.log('JWT Token:', jwtToken);
+                } else {
+                    document.getElementById('loginStatus').innerText = data.message || 'Login failed';
+                }
+            } catch (err) {
+                console.error(err);
+                document.getElementById('loginStatus').innerText = 'Login error';
+            }
+        }
+
+        function joinQuiz() {
+            if (!jwtToken) {
+                alert('Please login first');
+                return;
+            }
+
+            const joinCode = document.getElementById('joinCode').value;
+
+            // Connect to Socket.io server with auth
+            socket = io('http://localhost:7777', {
+                auth: { token: jwtToken }
+            });
+
+            socket.on('connect', () => {
+                console.log('Connected to server via socket');
+                socket.emit('joinQuiz', { joinCode }); // your gateway event for joining
+            });
+
+            socket.on('quizStarted', (data) => {
+                console.log('Quiz started:', data);
+                document.getElementById('quizStatus').innerText = 'Quiz started!';
+            });
+
+            socket.on('quizEnded', (data) => {
+                console.log('Quiz ended:', data);
+                document.getElementById('quizStatus').innerText = 'Quiz ended!';
+            });
+
+            socket.on('newAnswer', (data) => {
+                console.log('New answer submitted:', data);
+            });
+
+            socket.on('disconnect', () => {
+                console.log('Disconnected from server');
+            });
+        }
+
+        async function submitAnswer() {
+            if (!socket || !jwtToken) {
+                alert('Join quiz first');
+                return;
+            }
+
+            const sessionId = parseInt(document.getElementById('sessionId').value);
+            const questionId = parseInt(document.getElementById('questionId').value);
+            const selectedOptionIndex = parseInt(document.getElementById('selectedOption').value);
+
+            try {
+                const res = await fetch(`${API_URL}/quiz/submit-answer`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${jwtToken}`
+                    },
+                    body: JSON.stringify({ sessionId, questionId, selectedOptionIndex })
+                });
+                const data = await res.json();
+                if (res.ok) {
+                    document.getElementById('answerStatus').innerText = 'Answer submitted!';
+                    console.log('Answer submitted:', data);
+                } else {
+                    document.getElementById('answerStatus').innerText = data.message || 'Submission failed';
+                }
+            } catch (err) {
+                console.error(err);
+                document.getElementById('answerStatus').innerText = 'Submission error';
+            }
+        }
+    </script>
+</body>
+
+</html>

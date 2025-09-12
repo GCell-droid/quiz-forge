@@ -3,6 +3,7 @@
 /* eslint-disable @typescript-eslint/no-unsafe-call */
 import {
   BadRequestException,
+  ForbiddenException,
   Injectable,
   InternalServerErrorException,
   NotFoundException,
@@ -18,6 +19,9 @@ import { QuizSessionEntity } from './entites/quizsession.entity';
 import { ScheduleQuizDto } from './dto/schedule-quiz.dto';
 import { CreateQuizDto } from './dto/create-quiz-dto';
 import { randomBytes } from 'crypto';
+import { SubmitAnswerDto } from './dto/submit-answer.dto';
+import { AnswerEntity } from './entites/answer.entity';
+import { QuizGateway } from './gateway/quiz.gateway';
 @Injectable()
 export class QuizService {
   constructor(
@@ -34,6 +38,11 @@ export class QuizService {
     private userRepo: Repository<UserEntity>,
 
     private schedulerRegistry: SchedulerRegistry,
+
+    @InjectRepository(AnswerEntity)
+    private readonly answerRepo: Repository<AnswerEntity>,
+
+    private readonly quizGateway: QuizGateway,
   ) {}
 
   async createQuiz(dto: CreateQuizDto, teacherId: number): Promise<QuizEntity> {
@@ -71,6 +80,7 @@ export class QuizService {
         relations: ['questions'],
       });
       if (!quiz) throw new NotFoundException('Quiz not found');
+
       const conflict = await this.sessionRepo.findOne({
         where: {
           quiz: { id: dto.quizId },
@@ -86,7 +96,7 @@ export class QuizService {
       }
 
       // ✅ Generate random join code
-      const joinCode = randomBytes(3).toString('hex').toUpperCase(); // 6-char code like 'A1B2C3'
+      const joinCode = randomBytes(3).toString('hex').toUpperCase();
 
       const session = this.sessionRepo.create({
         quiz,
@@ -94,7 +104,7 @@ export class QuizService {
         joinCode,
         scheduledStartTime: new Date(dto.scheduledStartTime),
         scheduledEndTime: new Date(dto.scheduledEndTime),
-        isActive: false,
+        isActive: false, // optional, if you don’t rely on it anymore
       });
 
       if (dto.allowedStudents?.length) {
@@ -105,34 +115,37 @@ export class QuizService {
 
       const savedSession = await this.sessionRepo.save(session);
 
-      // Start cron
+      // 🔔 Notify via socket when quiz starts
       this.addCronJob(
         `start-${savedSession.id}`,
         new Date(dto.scheduledStartTime),
         async () => {
-          savedSession.isActive = true;
-          savedSession.startedAt = new Date();
-          await this.sessionRepo.save(savedSession);
+          this.quizGateway.server
+            .to(savedSession.joinCode)
+            .emit('quizStarted', {
+              sessionId: savedSession.id,
+              quizId: savedSession.quiz.id,
+              startTime: savedSession.scheduledStartTime,
+            });
         },
       );
 
-      // End cron
+      // 🔔 Notify via socket when quiz ends
       this.addCronJob(
         `end-${savedSession.id}`,
         new Date(dto.scheduledEndTime),
         async () => {
-          savedSession.isActive = false;
-          savedSession.endedAt = new Date();
-          await this.sessionRepo.save(savedSession);
+          this.quizGateway.server.to(savedSession.joinCode).emit('quizEnded', {
+            sessionId: savedSession.id,
+            quizId: savedSession.quiz.id,
+            endTime: savedSession.scheduledEndTime,
+          });
         },
       );
 
       return savedSession;
-    } catch (e) {
-      if (e instanceof NotFoundException || e instanceof BadRequestException) {
-        throw e;
-      }
-      throw new InternalServerErrorException(e.message);
+    } catch (error) {
+      throw new InternalServerErrorException(error.message);
     }
   }
 
@@ -163,5 +176,117 @@ export class QuizService {
 
     this.schedulerRegistry.addCronJob(name, job);
     job.start();
+  }
+  async submitAnswer(studentId: number, dto: SubmitAnswerDto) {
+    return await this.answerRepo.manager.transaction(async (manager) => {
+      const session = await manager.findOne(QuizSessionEntity, {
+        where: { id: dto.sessionId },
+        relations: ['quiz', 'allowedStudents'],
+      });
+      if (!session) throw new NotFoundException('Session not found');
+      if (!session.isActive) {
+        throw new BadRequestException('Session is not active');
+      }
+
+      // check student allowed
+      if (session.allowedStudents?.length) {
+        const allowed = session.allowedStudents.some((s) => s.id === studentId);
+        if (!allowed) {
+          throw new ForbiddenException('You are not allowed in this session');
+        }
+      }
+
+      // ✅ check if already submitted
+      const existing = await manager.findOne(AnswerEntity, {
+        where: {
+          student: { id: studentId },
+          question: { id: dto.questionId },
+          session: { id: dto.sessionId },
+        },
+      });
+      if (existing) {
+        throw new BadRequestException('You have already submitted this answer');
+      }
+
+      const question = await manager.findOne(QuestionEntity, {
+        where: { id: dto.questionId },
+        relations: ['quiz'],
+      });
+      if (!question) throw new NotFoundException('Question not found');
+
+      // ensure question belongs to this quiz
+      if (question.quiz.id !== session.quiz.id) {
+        throw new BadRequestException(
+          'Question does not belong to session quiz',
+        );
+      }
+
+      // compute score
+      const isCorrect = question.correctAnswerIndex === dto.selectedOptionIndex;
+      const score = isCorrect ? question.marks : 0;
+
+      const student = await manager.findOne(UserEntity, {
+        where: { id: studentId },
+      });
+      if (!student) throw new NotFoundException('Student not found');
+
+      const answer = manager.create(AnswerEntity, {
+        student,
+        question,
+        session,
+        selectedOptionIndex: dto.selectedOptionIndex,
+        score,
+      });
+
+      const saved = await manager.save(answer);
+
+      // ✅ Emit update to teacher room (outside transaction effect)
+      this.quizGateway.emitAnswerToTeacher(session.id, {
+        answerId: saved.id,
+        questionId: question.id,
+        studentId,
+        selectedOptionIndex: dto.selectedOptionIndex,
+        score,
+        createdAt: saved.createdAt,
+      });
+
+      return { ok: true, answerId: saved.id };
+    });
+  }
+  async joinQuiz(studentId: number, joinCode: string) {
+    const session = await this.sessionRepo.findOne({
+      where: { joinCode },
+      relations: ['quiz', 'allowedStudents', 'quiz.questions'],
+    });
+
+    if (!session) throw new NotFoundException('Invalid join code');
+
+    const now = new Date();
+    if (now < session.scheduledStartTime || now > session.scheduledEndTime) {
+      throw new BadRequestException('Quiz is not live');
+    }
+
+    // Check if student is allowed
+    if (session.allowedStudents?.length) {
+      const allowed = session.allowedStudents.some((s) => s.id === studentId);
+      if (!allowed) throw new ForbiddenException('Not allowed in this quiz');
+    }
+
+    // Add student to socket room (for live updates)
+    this.quizGateway.server.socketsJoin(joinCode);
+
+    return {
+      sessionId: session.id,
+      quizId: session.quiz.id,
+      title: session.quiz.title,
+      description: session.quiz.description,
+      timerSeconds: session.quiz.timerSeconds,
+      questions: session.quiz.questions.map((q) => ({
+        id: q.id,
+        text: q.text,
+        options: q.options,
+        marks: q.marks,
+      })),
+    };
   }
 }

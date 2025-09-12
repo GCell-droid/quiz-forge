@@ -16,6 +16,7 @@ const quiz_entity_1 = require("./entites/quiz.entity");
 const question_entity_1 = require("./entites/question.entity");
 const answer_entity_1 = require("./entites/answer.entity");
 const quizsession_entity_1 = require("./entites/quizsession.entity");
+const quiz_gateway_1 = require("./gateway/quiz.gateway");
 let QuizModule = class QuizModule {
 };
 exports.QuizModule = QuizModule;
@@ -30,8 +31,9 @@ exports.QuizModule = QuizModule = __decorate([
                 user_entity_1.UserEntity,
             ]),
         ],
-        providers: [quiz_service_1.QuizService],
+        providers: [quiz_service_1.QuizService, quiz_gateway_1.QuizGateway],
         controllers: [quiz_controller_1.QuizController],
+        exports: [quiz_service_1.QuizService],
     })
 ], QuizModule);
 //# sourceMappingURL=quiz.module.js.map
