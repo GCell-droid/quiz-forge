@@ -1,9 +1,11 @@
 import {
   IsEmail,
+  IsEnum,
   IsNotEmpty,
   IsString,
   IsStrongPassword,
 } from 'class-validator';
+import { UserRole } from '../entity/user.entity';
 
 export class RegisterDTO {
   @IsEmail({}, { message: 'Please Provide Email' })
@@ -14,6 +16,6 @@ export class RegisterDTO {
   @IsNotEmpty({ message: 'Please provide password' })
   @IsStrongPassword({}, { message: 'Please provide strong password' })
   password: string;
-  @IsNotEmpty()
-  role: string;
+  @IsEnum(UserRole, { message: "Role must be either 'teacher' or 'student'" })
+  role: UserRole;
 }

@@ -28,10 +28,10 @@ export declare class AuthController {
             email: string;
             name: string;
             role: UserRole;
-            quizzes: import("../quiz/entites/quiz.entity").QuizEntity[];
-            answers: import("../quiz/entites/answer.entity").AnswerEntity[];
-            sessions: import("../quiz/entites/quizsession.entity").QuizSessionEntity[];
             createdAt: Date;
+            quizzes: import("../quiz/entites/quiz.entity").QuizEntity[];
+            responses: import("../quiz/entites/response.entity").ResponseEntity[];
+            results: import("../quiz/entites/result.entity").ResultEntity[];
         };
     } | undefined>;
     register(registerdto: RegisterDTO): Promise<{
@@ -40,10 +40,10 @@ export declare class AuthController {
             email: string;
             name: string;
             role: UserRole;
-            quizzes: import("../quiz/entites/quiz.entity").QuizEntity[];
-            answers: import("../quiz/entites/answer.entity").AnswerEntity[];
-            sessions: import("../quiz/entites/quizsession.entity").QuizSessionEntity[];
             createdAt: Date;
+            quizzes: import("../quiz/entites/quiz.entity").QuizEntity[];
+            responses: import("../quiz/entites/response.entity").ResponseEntity[];
+            results: import("../quiz/entites/result.entity").ResultEntity[];
         };
         message: string;
     }>;

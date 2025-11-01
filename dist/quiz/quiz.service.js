@@ -16,221 +16,118 @@ exports.QuizService = void 0;
 const common_1 = require("@nestjs/common");
 const typeorm_1 = require("@nestjs/typeorm");
 const typeorm_2 = require("typeorm");
-const schedule_1 = require("@nestjs/schedule");
-const cron_1 = require("cron");
-const user_entity_1 = require("../auth/entity/user.entity");
 const quiz_entity_1 = require("./entites/quiz.entity");
 const question_entity_1 = require("./entites/question.entity");
-const quizsession_entity_1 = require("./entites/quizsession.entity");
-const crypto_1 = require("crypto");
-const answer_entity_1 = require("./entites/answer.entity");
-const quiz_gateway_1 = require("./gateway/quiz.gateway");
+const option_entity_1 = require("./entites/option.entity");
+const user_entity_1 = require("../auth/entity/user.entity");
 let QuizService = class QuizService {
     quizRepo;
     questionRepo;
-    sessionRepo;
+    optionRepo;
     userRepo;
-    schedulerRegistry;
-    answerRepo;
-    quizGateway;
-    constructor(quizRepo, questionRepo, sessionRepo, userRepo, schedulerRegistry, answerRepo, quizGateway) {
+    dataSource;
+    constructor(quizRepo, questionRepo, optionRepo, userRepo, dataSource) {
         this.quizRepo = quizRepo;
         this.questionRepo = questionRepo;
-        this.sessionRepo = sessionRepo;
+        this.optionRepo = optionRepo;
         this.userRepo = userRepo;
-        this.schedulerRegistry = schedulerRegistry;
-        this.answerRepo = answerRepo;
-        this.quizGateway = quizGateway;
+        this.dataSource = dataSource;
     }
-    async createQuiz(dto, teacherId) {
-        const teacher = await this.userRepo.findOneBy({ id: teacherId });
-        if (!teacher)
-            throw new common_1.NotFoundException('Teacher not found');
-        const questions = dto.questions.map((q) => this.questionRepo.create({
-            text: q.text,
-            options: q.options,
-            correctAnswerIndex: q.correctAnswerIndex,
-            marks: q.marks,
-        }));
-        const quiz = this.quizRepo.create({
-            title: dto.title,
-            description: dto.description,
-            isAIgenerated: dto.isAIgenerated || false,
-            author: teacher,
-            timerSeconds: dto.timerSeconds,
-            questions,
-        });
-        return this.quizRepo.save(quiz);
-    }
-    async scheduleQuiz(dto, teacherId) {
+    async createQuiz(userId, dto) {
         try {
-            const teacher = await this.userRepo.findOneBy({ id: teacherId });
-            if (!teacher)
-                throw new common_1.NotFoundException('Teacher not found');
-            const quiz = await this.quizRepo.findOne({
-                where: { id: dto.quizId },
-                relations: ['questions'],
-            });
-            if (!quiz)
-                throw new common_1.NotFoundException('Quiz not found');
-            const conflict = await this.sessionRepo.findOne({
-                where: {
-                    quiz: { id: dto.quizId },
-                    scheduledStartTime: (0, typeorm_2.LessThanOrEqual)(new Date(dto.scheduledEndTime)),
-                    scheduledEndTime: (0, typeorm_2.MoreThanOrEqual)(new Date(dto.scheduledStartTime)),
-                },
-            });
-            if (conflict) {
-                throw new common_1.BadRequestException(`This quiz already has a session scheduled between ${conflict.scheduledStartTime.toISOString()} and ${conflict.scheduledEndTime.toISOString()}`);
+            const user = await this.userRepo.findOne({ where: { id: userId } });
+            if (!user)
+                throw new common_1.NotFoundException('Creator user not found');
+            if (!Array.isArray(dto.questions) || dto.questions.length === 0) {
+                throw new common_1.BadRequestException('At least one question is required');
             }
-            const joinCode = (0, crypto_1.randomBytes)(3).toString('hex').toUpperCase();
-            const session = this.sessionRepo.create({
-                quiz,
-                teacher,
-                joinCode,
-                scheduledStartTime: new Date(dto.scheduledStartTime),
-                scheduledEndTime: new Date(dto.scheduledEndTime),
-                isActive: false,
-            });
-            if (dto.allowedStudents?.length) {
-                session.allowedStudents = await this.userRepo.findBy({
-                    id: (0, typeorm_2.In)(dto.allowedStudents),
-                });
-            }
-            const savedSession = await this.sessionRepo.save(session);
-            this.addCronJob(`start-${savedSession.id}`, new Date(dto.scheduledStartTime), async () => {
-                this.quizGateway.server
-                    .to(savedSession.joinCode)
-                    .emit('quizStarted', {
-                    sessionId: savedSession.id,
-                    quizId: savedSession.quiz.id,
-                    startTime: savedSession.scheduledStartTime,
-                });
-            });
-            this.addCronJob(`end-${savedSession.id}`, new Date(dto.scheduledEndTime), async () => {
-                this.quizGateway.server.to(savedSession.joinCode).emit('quizEnded', {
-                    sessionId: savedSession.id,
-                    quizId: savedSession.quiz.id,
-                    endTime: savedSession.scheduledEndTime,
-                });
-            });
-            return savedSession;
-        }
-        catch (error) {
-            throw new common_1.InternalServerErrorException(error.message);
-        }
-    }
-    async getQuiz(quizId) {
-        const quiz = await this.quizRepo.findOne({
-            where: { id: quizId },
-            relations: ['questions'],
-        });
-        if (!quiz)
-            throw new common_1.NotFoundException('Quiz not found');
-        return quiz;
-    }
-    addCronJob(name, date, callback) {
-        if (this.schedulerRegistry.doesExist('cron', name)) {
-            this.schedulerRegistry.deleteCronJob(name);
-        }
-        const job = new cron_1.CronJob(date, async () => {
-            await callback();
-        });
-        this.schedulerRegistry.addCronJob(name, job);
-        job.start();
-    }
-    async submitAnswer(studentId, dto) {
-        return await this.answerRepo.manager.transaction(async (manager) => {
-            const session = await manager.findOne(quizsession_entity_1.QuizSessionEntity, {
-                where: { id: dto.sessionId },
-                relations: ['quiz', 'allowedStudents'],
-            });
-            if (!session)
-                throw new common_1.NotFoundException('Session not found');
-            if (!session.isActive) {
-                throw new common_1.BadRequestException('Session is not active');
-            }
-            if (session.allowedStudents?.length) {
-                const allowed = session.allowedStudents.some((s) => s.id === studentId);
-                if (!allowed) {
-                    throw new common_1.ForbiddenException('You are not allowed in this session');
+            const scheduledAt = dto.scheduledAt
+                ? new Date(dto.scheduledAt)
+                : undefined;
+            const endAt = dto.endAt ? new Date(dto.endAt) : undefined;
+            if (scheduledAt && isNaN(scheduledAt.getTime()))
+                throw new common_1.BadRequestException('scheduledAt is not a valid date');
+            if (endAt && isNaN(endAt.getTime()))
+                throw new common_1.BadRequestException('endAt is not a valid date');
+            if (scheduledAt && endAt && scheduledAt >= endAt)
+                throw new common_1.BadRequestException('scheduledAt must be before endAt');
+            const questionDtos = dto.questions;
+            const savedQuiz = await this.dataSource.transaction(async (manager) => {
+                const quizRepository = manager.getRepository(quiz_entity_1.QuizEntity);
+                const questionRepository = manager.getRepository(question_entity_1.QuestionEntity);
+                const optionRepository = manager.getRepository(option_entity_1.OptionEntity);
+                const quizPayload = {
+                    title: dto.title,
+                    description: dto.description ?? undefined,
+                    scheduledAt: scheduledAt ?? undefined,
+                    endAt: endAt ?? undefined,
+                    timeLimit: typeof dto.durationInMinutes === 'number'
+                        ? dto.durationInMinutes
+                        : dto.durationInMinutes
+                            ? Number(dto.durationInMinutes)
+                            : undefined,
+                    createdById: user.id,
+                };
+                const quiz = quizRepository.create(quizPayload);
+                const persistedQuiz = await quizRepository.save(quiz);
+                const createdQuestions = [];
+                for (const [qIndex, qDto] of questionDtos.entries()) {
+                    if (!Array.isArray(qDto.options) || qDto.options.length < 2) {
+                        throw new common_1.BadRequestException(`Question ${qIndex}: options must be an array with at least 2 items`);
+                    }
+                    const correctIdx = qDto.correctOptionIndex;
+                    if (correctIdx == null ||
+                        typeof correctIdx !== 'number' ||
+                        correctIdx < 0 ||
+                        correctIdx >= qDto.options.length) {
+                        throw new common_1.BadRequestException(`Question ${qIndex}: correctOptionIndex is invalid`);
+                    }
+                    const questionPayload = {
+                        text: qDto.questionText,
+                        marks: qDto.points ?? 1,
+                        type: qDto.type ?? undefined,
+                        quiz: persistedQuiz,
+                    };
+                    const question = questionRepository.create(questionPayload);
+                    const persistedQuestion = await questionRepository.save(question);
+                    const optionPayloads = qDto.options.map((optText, idx) => ({
+                        text: optText,
+                        isCorrect: idx === correctIdx,
+                        question: persistedQuestion,
+                    }));
+                    const optionEntities = optionRepository.create(optionPayloads);
+                    const savedOptions = await optionRepository.save(optionEntities);
+                    persistedQuestion.options = savedOptions;
+                    createdQuestions.push(persistedQuestion);
                 }
-            }
-            const existing = await manager.findOne(answer_entity_1.AnswerEntity, {
-                where: {
-                    student: { id: studentId },
-                    question: { id: dto.questionId },
-                    session: { id: dto.sessionId },
-                },
+                const quizWithRelations = await quizRepository.findOne({
+                    where: { id: persistedQuiz.id },
+                    relations: ['questions', 'questions.options', 'createdBy'],
+                    select: {
+                        id: true,
+                        title: true,
+                        description: true,
+                        scheduledAt: true,
+                        endAt: true,
+                        timeLimit: true,
+                        createdAt: true,
+                        createdBy: {
+                            id: true,
+                            name: true,
+                            email: true,
+                            role: true,
+                        },
+                    },
+                });
+                if (!quizWithRelations)
+                    throw new Error('Failed to load created quiz');
+                return quizWithRelations;
             });
-            if (existing) {
-                throw new common_1.BadRequestException('You have already submitted this answer');
-            }
-            const question = await manager.findOne(question_entity_1.QuestionEntity, {
-                where: { id: dto.questionId },
-                relations: ['quiz'],
-            });
-            if (!question)
-                throw new common_1.NotFoundException('Question not found');
-            if (question.quiz.id !== session.quiz.id) {
-                throw new common_1.BadRequestException('Question does not belong to session quiz');
-            }
-            const isCorrect = question.correctAnswerIndex === dto.selectedOptionIndex;
-            const score = isCorrect ? question.marks : 0;
-            const student = await manager.findOne(user_entity_1.UserEntity, {
-                where: { id: studentId },
-            });
-            if (!student)
-                throw new common_1.NotFoundException('Student not found');
-            const answer = manager.create(answer_entity_1.AnswerEntity, {
-                student,
-                question,
-                session,
-                selectedOptionIndex: dto.selectedOptionIndex,
-                score,
-            });
-            const saved = await manager.save(answer);
-            this.quizGateway.emitAnswerToTeacher(session.id, {
-                answerId: saved.id,
-                questionId: question.id,
-                studentId,
-                selectedOptionIndex: dto.selectedOptionIndex,
-                score,
-                createdAt: saved.createdAt,
-            });
-            return { ok: true, answerId: saved.id };
-        });
-    }
-    async joinQuiz(studentId, joinCode) {
-        const session = await this.sessionRepo.findOne({
-            where: { joinCode },
-            relations: ['quiz', 'allowedStudents', 'quiz.questions'],
-        });
-        if (!session)
-            throw new common_1.NotFoundException('Invalid join code');
-        const now = new Date();
-        if (now < session.scheduledStartTime || now > session.scheduledEndTime) {
-            throw new common_1.BadRequestException('Quiz is not live');
+            return savedQuiz;
         }
-        if (session.allowedStudents?.length) {
-            const allowed = session.allowedStudents.some((s) => s.id === studentId);
-            if (!allowed)
-                throw new common_1.ForbiddenException('Not allowed in this quiz');
+        catch (e) {
+            throw new common_1.PreconditionFailedException(e.message);
         }
-        this.quizGateway.server.socketsJoin(joinCode);
-        return {
-            sessionId: session.id,
-            quizId: session.quiz.id,
-            title: session.quiz.title,
-            description: session.quiz.description,
-            timerSeconds: session.quiz.timerSeconds,
-            questions: session.quiz.questions.map((q) => ({
-                id: q.id,
-                text: q.text,
-                options: q.options,
-                marks: q.marks,
-            })),
-        };
     }
 };
 exports.QuizService = QuizService;
@@ -238,15 +135,12 @@ exports.QuizService = QuizService = __decorate([
     (0, common_1.Injectable)(),
     __param(0, (0, typeorm_1.InjectRepository)(quiz_entity_1.QuizEntity)),
     __param(1, (0, typeorm_1.InjectRepository)(question_entity_1.QuestionEntity)),
-    __param(2, (0, typeorm_1.InjectRepository)(quizsession_entity_1.QuizSessionEntity)),
+    __param(2, (0, typeorm_1.InjectRepository)(option_entity_1.OptionEntity)),
     __param(3, (0, typeorm_1.InjectRepository)(user_entity_1.UserEntity)),
-    __param(5, (0, typeorm_1.InjectRepository)(answer_entity_1.AnswerEntity)),
     __metadata("design:paramtypes", [typeorm_2.Repository,
         typeorm_2.Repository,
         typeorm_2.Repository,
         typeorm_2.Repository,
-        schedule_1.SchedulerRegistry,
-        typeorm_2.Repository,
-        quiz_gateway_1.QuizGateway])
+        typeorm_2.DataSource])
 ], QuizService);
 //# sourceMappingURL=quiz.service.js.map

@@ -1,49 +1,43 @@
-import {
-  IsString,
-  IsOptional,
-  IsBoolean,
-  IsInt,
-  Min,
-  ValidateNested,
-  IsArray,
-} from 'class-validator';
 import { Type } from 'class-transformer';
-
-export class CreateQuestionDto {
-  @IsString()
-  text: string;
-
-  @IsArray()
-  @IsString({ each: true })
-  options: string[];
-
-  @IsInt()
-  @Min(0)
-  correctAnswerIndex: number;
-
-  @IsInt()
-  marks: number;
-}
+import {
+  IsArray,
+  IsDateString,
+  IsInt,
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+  ValidateNested,
+  Min,
+} from 'class-validator';
+import { CreateQuestionDto } from './create-question-dto';
 
 export class CreateQuizDto {
   @IsString()
+  @IsNotEmpty()
   title: string;
 
   @IsOptional()
   @IsString()
   description?: string;
 
+  // optional ISO date/time strings or JS Date strings
   @IsOptional()
-  @IsBoolean()
-  isAIgenerated?: boolean;
+  @IsDateString()
+  scheduledAt?: string;
+
+  @IsOptional()
+  @IsDateString()
+  endAt?: string;
+
+  // duration in minutes (optional)
+  @IsOptional()
+  @IsInt()
+  @Type(() => Number)
+  @Min(1)
+  durationInMinutes?: number;
 
   @IsArray()
   @ValidateNested({ each: true })
   @Type(() => CreateQuestionDto)
   questions: CreateQuestionDto[];
-
-  @IsOptional()
-  @IsInt()
-  @Min(1)
-  timerSeconds?: number;
 }

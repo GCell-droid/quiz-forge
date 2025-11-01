@@ -1,35 +1,45 @@
 import {
-  Column,
   Entity,
+  PrimaryGeneratedColumn,
+  Column,
   ManyToOne,
   OneToMany,
-  PrimaryGeneratedColumn,
 } from 'typeorm';
 import { QuizEntity } from './quiz.entity';
-import { AnswerEntity } from './answer.entity';
+import { OptionEntity } from './option.entity';
+import { ResponseEntity } from './response.entity';
+
+export enum QuestionType {
+  MCQ = 'mcq',
+  TRUE_FALSE = 'true_false',
+}
 
 @Entity('question')
 export class QuestionEntity {
   @PrimaryGeneratedColumn()
   id: number;
 
-  @Column()
-  text: string;
-
-  @Column('simple-array')
-  options: string[]; // ["A", "B", "C", "D"]
-
-  @Column()
-  correctAnswerIndex: number;
-
   @ManyToOne(() => QuizEntity, (quiz) => quiz.questions, {
     onDelete: 'CASCADE',
   })
   quiz: QuizEntity;
 
-  @OneToMany(() => AnswerEntity, (a) => a.question)
-  answers: AnswerEntity[];
+  @Column({ type: 'text' })
+  text: string;
 
-  @Column()
+  @Column({
+    type: 'enum',
+    enum: QuestionType,
+    default: QuestionType.MCQ,
+  })
+  type: QuestionType;
+
+  @Column({ type: 'int', default: 1 })
   marks: number;
+
+  @OneToMany(() => OptionEntity, (option) => option.question)
+  options: OptionEntity[];
+
+  @OneToMany(() => ResponseEntity, (response) => response.question)
+  responses: ResponseEntity[];
 }

@@ -11,6 +11,7 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.RegisterDTO = void 0;
 const class_validator_1 = require("class-validator");
+const user_entity_1 = require("../entity/user.entity");
 class RegisterDTO {
     email;
     name;
@@ -33,7 +34,7 @@ __decorate([
     __metadata("design:type", String)
 ], RegisterDTO.prototype, "password", void 0);
 __decorate([
-    (0, class_validator_1.IsNotEmpty)(),
+    (0, class_validator_1.IsEnum)(user_entity_1.UserRole, { message: "Role must be either 'teacher' or 'student'" }),
     __metadata("design:type", String)
 ], RegisterDTO.prototype, "role", void 0);
 //# sourceMappingURL=register.dto.js.map

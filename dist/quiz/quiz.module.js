@@ -14,9 +14,9 @@ const quiz_controller_1 = require("./quiz.controller");
 const user_entity_1 = require("../auth/entity/user.entity");
 const quiz_entity_1 = require("./entites/quiz.entity");
 const question_entity_1 = require("./entites/question.entity");
-const answer_entity_1 = require("./entites/answer.entity");
-const quizsession_entity_1 = require("./entites/quizsession.entity");
-const quiz_gateway_1 = require("./gateway/quiz.gateway");
+const option_entity_1 = require("./entites/option.entity");
+const response_entity_1 = require("./entites/response.entity");
+const result_entity_1 = require("./entites/result.entity");
 let QuizModule = class QuizModule {
 };
 exports.QuizModule = QuizModule;
@@ -26,12 +26,13 @@ exports.QuizModule = QuizModule = __decorate([
             typeorm_1.TypeOrmModule.forFeature([
                 quiz_entity_1.QuizEntity,
                 question_entity_1.QuestionEntity,
-                answer_entity_1.AnswerEntity,
-                quizsession_entity_1.QuizSessionEntity,
+                response_entity_1.ResponseEntity,
+                option_entity_1.OptionEntity,
                 user_entity_1.UserEntity,
+                result_entity_1.ResultEntity,
             ]),
         ],
-        providers: [quiz_service_1.QuizService, quiz_gateway_1.QuizGateway],
+        providers: [quiz_service_1.QuizService],
         controllers: [quiz_controller_1.QuizController],
         exports: [quiz_service_1.QuizService],
     })

@@ -15,85 +15,32 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.QuizController = void 0;
 const common_1 = require("@nestjs/common");
 const quiz_service_1 = require("./quiz.service");
-const roles_decorator_1 = require("../auth/decorators/roles.decorator");
-const user_entity_1 = require("../auth/entity/user.entity");
 const jwt_auth_guard_1 = require("../auth/guards/jwtguard/jwt-auth.guard");
 const roles_guard_1 = require("../auth/guards/roles-guard/roles.guard");
+const combined_auth_guard_1 = require("../auth/guards/combinedGuard/combined-auth.guard");
 const create_quiz_dto_1 = require("./dto/create-quiz-dto");
-const schedule_quiz_dto_1 = require("./dto/schedule-quiz.dto");
-const submit_answer_dto_1 = require("./dto/submit-answer.dto");
+const roles_decorator_1 = require("../auth/decorators/roles.decorator");
+const user_entity_1 = require("../auth/entity/user.entity");
 let QuizController = class QuizController {
     quizService;
     constructor(quizService) {
         this.quizService = quizService;
     }
-    async createQuiz(dto, req) {
-        const teacherId = req?.user?.id;
-        return this.quizService.createQuiz(dto, teacherId);
-    }
-    async scheduleQuiz(schdto, req) {
-        console.log(schdto);
-        const teacherId = req?.user?.id;
-        return this.quizService.scheduleQuiz(schdto, teacherId);
-    }
-    async getQuiz(quizId) {
-        return this.quizService.getQuiz(quizId);
-    }
-    async submitAnswer(req, dto) {
-        const user = req.user;
-        if (!user || user.role !== 'student') {
-            throw new common_1.ForbiddenException('Only students can submit answers');
-        }
-        return this.quizService.submitAnswer(user.id, dto);
-    }
-    async joinQuiz(req, joinCode) {
-        return this.quizService.joinQuiz(req.user.id, joinCode);
+    async CreateQuizDto(req, quizz) {
+        return await this.quizService.createQuiz(req.user.id, quizz);
     }
 };
 exports.QuizController = QuizController;
 __decorate([
-    (0, common_1.Post)('create-quiz'),
+    (0, common_1.Post)('/create-quiz'),
+    (0, common_1.UseGuards)(combined_auth_guard_1.GoogleOrJwtAuthGuard),
     (0, roles_decorator_1.Roles)(user_entity_1.UserRole.TEACHER),
-    __param(0, (0, common_1.Body)()),
-    __param(1, (0, common_1.Req)()),
-    __metadata("design:type", Function),
-    __metadata("design:paramtypes", [create_quiz_dto_1.CreateQuizDto, Object]),
-    __metadata("design:returntype", Promise)
-], QuizController.prototype, "createQuiz", null);
-__decorate([
-    (0, common_1.Post)('schedule'),
-    (0, roles_decorator_1.Roles)(user_entity_1.UserRole.TEACHER),
-    __param(0, (0, common_1.Body)()),
-    __param(1, (0, common_1.Req)()),
-    __metadata("design:type", Function),
-    __metadata("design:paramtypes", [schedule_quiz_dto_1.ScheduleQuizDto, Object]),
-    __metadata("design:returntype", Promise)
-], QuizController.prototype, "scheduleQuiz", null);
-__decorate([
-    (0, common_1.Get)(':id'),
-    __param(0, (0, common_1.Param)('id', common_1.ParseIntPipe)),
-    __metadata("design:type", Function),
-    __metadata("design:paramtypes", [Number]),
-    __metadata("design:returntype", Promise)
-], QuizController.prototype, "getQuiz", null);
-__decorate([
-    (0, common_1.Post)('submit-answer'),
-    (0, common_1.UseGuards)(jwt_auth_guard_1.jwtAuthGuard),
-    __param(0, (0, common_1.Request)()),
+    __param(0, (0, common_1.Req)()),
     __param(1, (0, common_1.Body)()),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [Object, submit_answer_dto_1.SubmitAnswerDto]),
+    __metadata("design:paramtypes", [Object, create_quiz_dto_1.CreateQuizDto]),
     __metadata("design:returntype", Promise)
-], QuizController.prototype, "submitAnswer", null);
-__decorate([
-    (0, common_1.Post)('join'),
-    (0, common_1.UseGuards)(jwt_auth_guard_1.jwtAuthGuard),
-    __param(0, (0, common_1.Req)()),
-    __param(1, (0, common_1.Body)('joinCode')),
-    __metadata("design:type", Function),
-    __metadata("design:paramtypes", [Object, String]),
-    __metadata("design:returntype", Promise)
-], QuizController.prototype, "joinQuiz", null);
+], QuizController.prototype, "CreateQuizDto", null);
 exports.QuizController = QuizController = __decorate([
     (0, common_1.Controller)('quiz'),
     (0, common_1.UseGuards)(jwt_auth_guard_1.jwtAuthGuard, roles_guard_1.RoleGuard),

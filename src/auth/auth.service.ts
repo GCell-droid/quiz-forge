@@ -3,6 +3,7 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
 import {
   ConflictException,
+  ForbiddenException,
   Injectable,
   UnauthorizedException,
 } from '@nestjs/common';
@@ -16,6 +17,7 @@ import bcrypt from 'bcrypt';
 import { LoginDto } from './dto/login.dto';
 import { GoogleRegisterDTO } from './dto/googleregistration.dto';
 import type { Request, Response } from 'express';
+import { ExceptionsHandler } from '@nestjs/core/exceptions/exceptions-handler';
 @Injectable()
 export class AuthService {
   constructor(
@@ -25,28 +27,34 @@ export class AuthService {
     private readonly configService: ConfigService,
   ) {}
   async register(registerdto: RegisterDTO) {
-    const existingUser = await this.userRepository.findOne({
-      where: { email: registerdto.email },
-    });
-    if (existingUser) {
-      throw new ConflictException(
-        "Can't Register the User. Conflicting Email!",
-      );
+    try {
+      const existingUser = await this.userRepository.findOne({
+        where: { email: registerdto.email },
+      });
+      if (existingUser) {
+        throw new ConflictException(
+          "Can't Register the User. Conflicting Email!",
+        );
+      }
+      const hashedPassword = await this.hashPassword(registerdto.password);
+      const newUser = this.userRepository.create({
+        name: registerdto.name,
+        email: registerdto.email,
+        password: hashedPassword,
+        role: registerdto.role,
+      });
+      const savedUser = await this.userRepository.save(newUser);
+      const { password, ...result } = savedUser;
+      return { user: result, message: 'User Registered Please Login' };
+    } catch (err) {
+      throw new ConflictException('Registration failed');
     }
-    const hashedPassword = await this.hashPassword(registerdto.password);
-    const newUser = this.userRepository.create({
-      name: registerdto.name,
-      email: registerdto.email,
-      password: hashedPassword,
-      role: registerdto.role as UserRole,
-    });
-    const savedUser = await this.userRepository.save(newUser);
-    const { password, ...result } = savedUser;
-    return { user: result, message: 'User Registered Please Login' };
   }
+
   private async hashPassword(password: string): Promise<string> {
     return await bcrypt.hash(password, 10);
   }
+
   async login(logindto: LoginDto, request: Request, res: Response) {
     try {
       const token = request?.signedCookies?.jwt;

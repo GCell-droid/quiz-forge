@@ -33,22 +33,27 @@ let AuthService = class AuthService {
         this.configService = configService;
     }
     async register(registerdto) {
-        const existingUser = await this.userRepository.findOne({
-            where: { email: registerdto.email },
-        });
-        if (existingUser) {
-            throw new common_1.ConflictException("Can't Register the User. Conflicting Email!");
+        try {
+            const existingUser = await this.userRepository.findOne({
+                where: { email: registerdto.email },
+            });
+            if (existingUser) {
+                throw new common_1.ConflictException("Can't Register the User. Conflicting Email!");
+            }
+            const hashedPassword = await this.hashPassword(registerdto.password);
+            const newUser = this.userRepository.create({
+                name: registerdto.name,
+                email: registerdto.email,
+                password: hashedPassword,
+                role: registerdto.role,
+            });
+            const savedUser = await this.userRepository.save(newUser);
+            const { password, ...result } = savedUser;
+            return { user: result, message: 'User Registered Please Login' };
         }
-        const hashedPassword = await this.hashPassword(registerdto.password);
-        const newUser = this.userRepository.create({
-            name: registerdto.name,
-            email: registerdto.email,
-            password: hashedPassword,
-            role: registerdto.role,
-        });
-        const savedUser = await this.userRepository.save(newUser);
-        const { password, ...result } = savedUser;
-        return { user: result, message: 'User Registered Please Login' };
+        catch (err) {
+            throw new common_1.ConflictException('Registration failed');
+        }
     }
     async hashPassword(password) {
         return await bcrypt_1.default.hash(password, 10);

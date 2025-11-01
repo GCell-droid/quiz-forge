@@ -1,14 +1,14 @@
-import { AnswerEntity } from 'src/quiz/entites/answer.entity';
-import { QuizEntity } from 'src/quiz/entites/quiz.entity';
-import { QuizSessionEntity } from 'src/quiz/entites/quizsession.entity';
 import {
   Column,
   CreateDateColumn,
   Entity,
   PrimaryGeneratedColumn,
   OneToMany,
-  ManyToMany,
 } from 'typeorm';
+import { QuizEntity } from '../../quiz/entites/quiz.entity';
+import { ResponseEntity } from '../../quiz/entites/response.entity';
+import { ResultEntity } from '../../quiz/entites/result.entity';
+import { Exclude } from 'class-transformer';
 
 export enum UserRole {
   STUDENT = 'student',
@@ -28,7 +28,7 @@ export class UserEntity {
   name: string;
 
   @Column()
-  password: string; // hashed
+  password: string;
 
   @Column({
     type: 'enum',
@@ -37,15 +37,18 @@ export class UserEntity {
   })
   role: UserRole;
 
-  @OneToMany(() => QuizEntity, (quiz) => quiz.author)
-  quizzes: QuizEntity[];
-
-  @OneToMany(() => AnswerEntity, (answer) => answer.student)
-  answers: AnswerEntity[];
-
-  @ManyToMany(() => QuizSessionEntity, (session) => session.allowedStudents)
-  sessions: QuizSessionEntity[];
-
   @CreateDateColumn()
   createdAt: Date;
+
+  // One teacher/admin can create multiple quizzes
+  @OneToMany(() => QuizEntity, (quiz) => quiz.createdBy)
+  quizzes: QuizEntity[];
+
+  // One student can have multiple responses
+  @OneToMany(() => ResponseEntity, (response) => response.user)
+  responses: ResponseEntity[];
+
+  // One student can have multiple results
+  @OneToMany(() => ResultEntity, (result) => result.user)
+  results: ResultEntity[];
 }

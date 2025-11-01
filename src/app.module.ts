@@ -14,7 +14,8 @@ import { StudentSideModule } from './student-side/student-side.module';
       url: process.env.DB_URL,
       ssl: true,
       autoLoadEntities: true,
-      synchronize: true, //do it false in production
+      synchronize: true, //do it false in production,
+      // dropSchema: true,
     }),
     ScheduleModule.forRoot(),
     AuthModule,

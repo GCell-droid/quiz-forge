@@ -10,10 +10,10 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.UserEntity = exports.UserRole = void 0;
-const answer_entity_1 = require("../../quiz/entites/answer.entity");
-const quiz_entity_1 = require("../../quiz/entites/quiz.entity");
-const quizsession_entity_1 = require("../../quiz/entites/quizsession.entity");
 const typeorm_1 = require("typeorm");
+const quiz_entity_1 = require("../../quiz/entites/quiz.entity");
+const response_entity_1 = require("../../quiz/entites/response.entity");
+const result_entity_1 = require("../../quiz/entites/result.entity");
 var UserRole;
 (function (UserRole) {
     UserRole["STUDENT"] = "student";
@@ -26,10 +26,10 @@ let UserEntity = class UserEntity {
     name;
     password;
     role;
-    quizzes;
-    answers;
-    sessions;
     createdAt;
+    quizzes;
+    responses;
+    results;
 };
 exports.UserEntity = UserEntity;
 __decorate([
@@ -57,21 +57,21 @@ __decorate([
     __metadata("design:type", String)
 ], UserEntity.prototype, "role", void 0);
 __decorate([
-    (0, typeorm_1.OneToMany)(() => quiz_entity_1.QuizEntity, (quiz) => quiz.author),
-    __metadata("design:type", Array)
-], UserEntity.prototype, "quizzes", void 0);
-__decorate([
-    (0, typeorm_1.OneToMany)(() => answer_entity_1.AnswerEntity, (answer) => answer.student),
-    __metadata("design:type", Array)
-], UserEntity.prototype, "answers", void 0);
-__decorate([
-    (0, typeorm_1.ManyToMany)(() => quizsession_entity_1.QuizSessionEntity, (session) => session.allowedStudents),
-    __metadata("design:type", Array)
-], UserEntity.prototype, "sessions", void 0);
-__decorate([
     (0, typeorm_1.CreateDateColumn)(),
     __metadata("design:type", Date)
 ], UserEntity.prototype, "createdAt", void 0);
+__decorate([
+    (0, typeorm_1.OneToMany)(() => quiz_entity_1.QuizEntity, (quiz) => quiz.createdBy),
+    __metadata("design:type", Array)
+], UserEntity.prototype, "quizzes", void 0);
+__decorate([
+    (0, typeorm_1.OneToMany)(() => response_entity_1.ResponseEntity, (response) => response.user),
+    __metadata("design:type", Array)
+], UserEntity.prototype, "responses", void 0);
+__decorate([
+    (0, typeorm_1.OneToMany)(() => result_entity_1.ResultEntity, (result) => result.user),
+    __metadata("design:type", Array)
+], UserEntity.prototype, "results", void 0);
 exports.UserEntity = UserEntity = __decorate([
     (0, typeorm_1.Entity)('user')
 ], UserEntity);

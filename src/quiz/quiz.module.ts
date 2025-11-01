@@ -6,21 +6,24 @@ import { QuizController } from './quiz.controller';
 import { UserEntity } from 'src/auth/entity/user.entity';
 import { QuizEntity } from './entites/quiz.entity';
 import { QuestionEntity } from './entites/question.entity';
-import { AnswerEntity } from './entites/answer.entity';
-import { QuizSessionEntity } from './entites/quizsession.entity';
-import { QuizGateway } from './gateway/quiz.gateway';
+import { OptionEntity } from './entites/option.entity';
+import { ResponseEntity } from './entites/response.entity';
+import { ResultEntity } from './entites/result.entity';
+
+// import { QuizGateway } from './gateway/quiz.gateway';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([
       QuizEntity,
       QuestionEntity,
-      AnswerEntity,
-      QuizSessionEntity,
+      ResponseEntity,
+      OptionEntity,
       UserEntity,
+      ResultEntity,
     ]),
   ],
-  providers: [QuizService, QuizGateway],
+  providers: [QuizService],
   controllers: [QuizController],
   exports: [QuizService], // export if used outside
 })

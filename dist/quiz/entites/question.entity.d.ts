@@ -1,11 +1,16 @@
 import { QuizEntity } from './quiz.entity';
-import { AnswerEntity } from './answer.entity';
+import { OptionEntity } from './option.entity';
+import { ResponseEntity } from './response.entity';
+export declare enum QuestionType {
+    MCQ = "mcq",
+    TRUE_FALSE = "true_false"
+}
 export declare class QuestionEntity {
     id: number;
-    text: string;
-    options: string[];
-    correctAnswerIndex: number;
     quiz: QuizEntity;
-    answers: AnswerEntity[];
+    text: string;
+    type: QuestionType;
     marks: number;
+    options: OptionEntity[];
+    responses: ResponseEntity[];
 }

@@ -1,6 +1,6 @@
-import { AnswerEntity } from 'src/quiz/entites/answer.entity';
-import { QuizEntity } from 'src/quiz/entites/quiz.entity';
-import { QuizSessionEntity } from 'src/quiz/entites/quizsession.entity';
+import { QuizEntity } from '../../quiz/entites/quiz.entity';
+import { ResponseEntity } from '../../quiz/entites/response.entity';
+import { ResultEntity } from '../../quiz/entites/result.entity';
 export declare enum UserRole {
     STUDENT = "student",
     TEACHER = "teacher",
@@ -12,8 +12,8 @@ export declare class UserEntity {
     name: string;
     password: string;
     role: UserRole;
-    quizzes: QuizEntity[];
-    answers: AnswerEntity[];
-    sessions: QuizSessionEntity[];
     createdAt: Date;
+    quizzes: QuizEntity[];
+    responses: ResponseEntity[];
+    results: ResultEntity[];
 }

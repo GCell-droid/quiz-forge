@@ -13,15 +13,20 @@ exports.QuizEntity = void 0;
 const typeorm_1 = require("typeorm");
 const user_entity_1 = require("../../auth/entity/user.entity");
 const question_entity_1 = require("./question.entity");
+const response_entity_1 = require("./response.entity");
+const result_entity_1 = require("./result.entity");
 let QuizEntity = class QuizEntity {
     id;
     title;
     description;
-    isAIgenerated;
-    author;
+    createdById;
+    createdBy;
+    scheduledAt;
+    endAt;
+    timeLimit;
     questions;
-    isActive;
-    timerSeconds;
+    responses;
+    results;
     createdAt;
 };
 exports.QuizEntity = QuizEntity;
@@ -38,25 +43,41 @@ __decorate([
     __metadata("design:type", String)
 ], QuizEntity.prototype, "description", void 0);
 __decorate([
-    (0, typeorm_1.Column)({ default: false }),
-    __metadata("design:type", Boolean)
-], QuizEntity.prototype, "isAIgenerated", void 0);
+    (0, typeorm_1.Column)(),
+    __metadata("design:type", Number)
+], QuizEntity.prototype, "createdById", void 0);
 __decorate([
-    (0, typeorm_1.ManyToOne)(() => user_entity_1.UserEntity, (user) => user.quizzes, { onDelete: 'CASCADE' }),
+    (0, typeorm_1.ManyToOne)(() => user_entity_1.UserEntity, (user) => user.quizzes, {
+        onDelete: 'CASCADE',
+        eager: false,
+    }),
+    (0, typeorm_1.JoinColumn)({ name: 'createdById' }),
     __metadata("design:type", user_entity_1.UserEntity)
-], QuizEntity.prototype, "author", void 0);
+], QuizEntity.prototype, "createdBy", void 0);
 __decorate([
-    (0, typeorm_1.OneToMany)(() => question_entity_1.QuestionEntity, (q) => q.quiz, { cascade: true }),
+    (0, typeorm_1.Column)({ type: 'timestamp', nullable: true }),
+    __metadata("design:type", Date)
+], QuizEntity.prototype, "scheduledAt", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ type: 'timestamp', nullable: true }),
+    __metadata("design:type", Date)
+], QuizEntity.prototype, "endAt", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ type: 'int', nullable: true }),
+    __metadata("design:type", Number)
+], QuizEntity.prototype, "timeLimit", void 0);
+__decorate([
+    (0, typeorm_1.OneToMany)(() => question_entity_1.QuestionEntity, (question) => question.quiz),
     __metadata("design:type", Array)
 ], QuizEntity.prototype, "questions", void 0);
 __decorate([
-    (0, typeorm_1.Column)({ default: false }),
-    __metadata("design:type", Boolean)
-], QuizEntity.prototype, "isActive", void 0);
+    (0, typeorm_1.OneToMany)(() => response_entity_1.ResponseEntity, (response) => response.quiz),
+    __metadata("design:type", Array)
+], QuizEntity.prototype, "responses", void 0);
 __decorate([
-    (0, typeorm_1.Column)({ nullable: true }),
-    __metadata("design:type", Number)
-], QuizEntity.prototype, "timerSeconds", void 0);
+    (0, typeorm_1.OneToMany)(() => result_entity_1.ResultEntity, (result) => result.quiz),
+    __metadata("design:type", Array)
+], QuizEntity.prototype, "results", void 0);
 __decorate([
     (0, typeorm_1.CreateDateColumn)(),
     __metadata("design:type", Date)

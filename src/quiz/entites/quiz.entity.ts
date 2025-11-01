@@ -1,13 +1,16 @@
 import {
-  Column,
-  CreateDateColumn,
   Entity,
+  PrimaryGeneratedColumn,
+  Column,
   ManyToOne,
   OneToMany,
-  PrimaryGeneratedColumn,
+  CreateDateColumn,
+  JoinColumn,
 } from 'typeorm';
-import { UserEntity } from 'src/auth/entity/user.entity';
+import { UserEntity } from '../../auth/entity/user.entity';
 import { QuestionEntity } from './question.entity';
+import { ResponseEntity } from './response.entity';
+import { ResultEntity } from './result.entity';
 
 @Entity('quiz')
 export class QuizEntity {
@@ -20,20 +23,34 @@ export class QuizEntity {
   @Column({ nullable: true })
   description: string;
 
-  @Column({ default: false })
-  isAIgenerated: boolean;
+  // foreign key column
+  @Column()
+  createdById: number;
 
-  @ManyToOne(() => UserEntity, (user) => user.quizzes, { onDelete: 'CASCADE' })
-  author: UserEntity;
+  @ManyToOne(() => UserEntity, (user) => user.quizzes, {
+    onDelete: 'CASCADE',
+    eager: false, // don’t automatically load the user
+  })
+  @JoinColumn({ name: 'createdById' }) // binds createdById <-> user.id
+  createdBy: UserEntity;
 
-  @OneToMany(() => QuestionEntity, (q) => q.quiz, { cascade: true })
+  @Column({ type: 'timestamp', nullable: true })
+  scheduledAt: Date;
+
+  @Column({ type: 'timestamp', nullable: true })
+  endAt: Date;
+
+  @Column({ type: 'int', nullable: true })
+  timeLimit: number;
+
+  @OneToMany(() => QuestionEntity, (question) => question.quiz)
   questions: QuestionEntity[];
 
-  @Column({ default: false })
-  isActive: boolean;
+  @OneToMany(() => ResponseEntity, (response) => response.quiz)
+  responses: ResponseEntity[];
 
-  @Column({ nullable: true })
-  timerSeconds: number;
+  @OneToMany(() => ResultEntity, (result) => result.quiz)
+  results: ResultEntity[];
 
   @CreateDateColumn()
   createdAt: Date;

@@ -17,10 +17,10 @@ export declare class AuthService {
             email: string;
             name: string;
             role: UserRole;
-            quizzes: import("../quiz/entites/quiz.entity").QuizEntity[];
-            answers: import("../quiz/entites/answer.entity").AnswerEntity[];
-            sessions: import("../quiz/entites/quizsession.entity").QuizSessionEntity[];
             createdAt: Date;
+            quizzes: import("../quiz/entites/quiz.entity").QuizEntity[];
+            responses: import("../quiz/entites/response.entity").ResponseEntity[];
+            results: import("../quiz/entites/result.entity").ResultEntity[];
         };
         message: string;
     }>;
@@ -32,10 +32,10 @@ export declare class AuthService {
             email: string;
             name: string;
             role: UserRole;
-            quizzes: import("../quiz/entites/quiz.entity").QuizEntity[];
-            answers: import("../quiz/entites/answer.entity").AnswerEntity[];
-            sessions: import("../quiz/entites/quizsession.entity").QuizSessionEntity[];
             createdAt: Date;
+            quizzes: import("../quiz/entites/quiz.entity").QuizEntity[];
+            responses: import("../quiz/entites/response.entity").ResponseEntity[];
+            results: import("../quiz/entites/result.entity").ResultEntity[];
         };
     } | undefined>;
     verifyPassword(password: string, dbpassword: string): Promise<boolean>;
@@ -51,10 +51,10 @@ export declare class AuthService {
             email: string;
             name: string;
             role: UserRole;
-            quizzes: import("../quiz/entites/quiz.entity").QuizEntity[];
-            answers: import("../quiz/entites/answer.entity").AnswerEntity[];
-            sessions: import("../quiz/entites/quizsession.entity").QuizSessionEntity[];
             createdAt: Date;
+            quizzes: import("../quiz/entites/quiz.entity").QuizEntity[];
+            responses: import("../quiz/entites/response.entity").ResponseEntity[];
+            results: import("../quiz/entites/result.entity").ResultEntity[];
         };
         tokens: {
             accessToken: string;
@@ -73,10 +73,10 @@ export declare class AuthService {
         email: string;
         name: string;
         role: UserRole;
-        quizzes: import("../quiz/entites/quiz.entity").QuizEntity[];
-        answers: import("../quiz/entites/answer.entity").AnswerEntity[];
-        sessions: import("../quiz/entites/quizsession.entity").QuizSessionEntity[];
         createdAt: Date;
+        quizzes: import("../quiz/entites/quiz.entity").QuizEntity[];
+        responses: import("../quiz/entites/response.entity").ResponseEntity[];
+        results: import("../quiz/entites/result.entity").ResultEntity[];
     }>;
     private setAuthCookies;
 }

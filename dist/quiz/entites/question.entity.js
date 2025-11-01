@@ -9,18 +9,24 @@ var __metadata = (this && this.__metadata) || function (k, v) {
     if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.QuestionEntity = void 0;
+exports.QuestionEntity = exports.QuestionType = void 0;
 const typeorm_1 = require("typeorm");
 const quiz_entity_1 = require("./quiz.entity");
-const answer_entity_1 = require("./answer.entity");
+const option_entity_1 = require("./option.entity");
+const response_entity_1 = require("./response.entity");
+var QuestionType;
+(function (QuestionType) {
+    QuestionType["MCQ"] = "mcq";
+    QuestionType["TRUE_FALSE"] = "true_false";
+})(QuestionType || (exports.QuestionType = QuestionType = {}));
 let QuestionEntity = class QuestionEntity {
     id;
-    text;
-    options;
-    correctAnswerIndex;
     quiz;
-    answers;
+    text;
+    type;
     marks;
+    options;
+    responses;
 };
 exports.QuestionEntity = QuestionEntity;
 __decorate([
@@ -28,31 +34,35 @@ __decorate([
     __metadata("design:type", Number)
 ], QuestionEntity.prototype, "id", void 0);
 __decorate([
-    (0, typeorm_1.Column)(),
-    __metadata("design:type", String)
-], QuestionEntity.prototype, "text", void 0);
-__decorate([
-    (0, typeorm_1.Column)('simple-array'),
-    __metadata("design:type", Array)
-], QuestionEntity.prototype, "options", void 0);
-__decorate([
-    (0, typeorm_1.Column)(),
-    __metadata("design:type", Number)
-], QuestionEntity.prototype, "correctAnswerIndex", void 0);
-__decorate([
     (0, typeorm_1.ManyToOne)(() => quiz_entity_1.QuizEntity, (quiz) => quiz.questions, {
         onDelete: 'CASCADE',
     }),
     __metadata("design:type", quiz_entity_1.QuizEntity)
 ], QuestionEntity.prototype, "quiz", void 0);
 __decorate([
-    (0, typeorm_1.OneToMany)(() => answer_entity_1.AnswerEntity, (a) => a.question),
-    __metadata("design:type", Array)
-], QuestionEntity.prototype, "answers", void 0);
+    (0, typeorm_1.Column)({ type: 'text' }),
+    __metadata("design:type", String)
+], QuestionEntity.prototype, "text", void 0);
 __decorate([
-    (0, typeorm_1.Column)(),
+    (0, typeorm_1.Column)({
+        type: 'enum',
+        enum: QuestionType,
+        default: QuestionType.MCQ,
+    }),
+    __metadata("design:type", String)
+], QuestionEntity.prototype, "type", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ type: 'int', default: 1 }),
     __metadata("design:type", Number)
 ], QuestionEntity.prototype, "marks", void 0);
+__decorate([
+    (0, typeorm_1.OneToMany)(() => option_entity_1.OptionEntity, (option) => option.question),
+    __metadata("design:type", Array)
+], QuestionEntity.prototype, "options", void 0);
+__decorate([
+    (0, typeorm_1.OneToMany)(() => response_entity_1.ResponseEntity, (response) => response.question),
+    __metadata("design:type", Array)
+], QuestionEntity.prototype, "responses", void 0);
 exports.QuestionEntity = QuestionEntity = __decorate([
     (0, typeorm_1.Entity)('question')
 ], QuestionEntity);
