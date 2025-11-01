@@ -1,11 +1,14 @@
 # Dependencies
 node_modules/
 
-# Environment variables
-.env
-
 # Build output
 dist/
+
+# Test files
+test/
+
+# Environment variables
+.env
 
 # Personal/temporary notes
 notes.md
