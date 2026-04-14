@@ -1,14 +1,61 @@
-# Dependencies
-node_modules/
+# =========================
+# GLOBAL
+# =========================
+.DS_Store
+Thumbs.db
 
-# Build output
-dist/
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
 
-# Test files
-test/
-
-# Environment variables
-.env
-
-# Personal/temporary notes
+# Personal notes
 notes.md
+
+# =========================
+# BACKEND (NestJS)
+# =========================
+Backend/node_modules/
+Backend/dist/
+Backend/build/
+Backend/test/
+Backend/.env
+Backend/.env.*
+
+# =========================
+# FRONTEND (Next.js)
+# =========================
+
+# dependencies
+Frontend/node_modules/
+Frontend/.pnp
+Frontend/.pnp.*
+Frontend/.yarn/*
+!Frontend/.yarn/patches
+!Frontend/.yarn/plugins
+!Frontend/.yarn/releases
+!Frontend/.yarn/versions
+
+# testing
+Frontend/coverage/
+
+# next.js
+Frontend/.next/
+Frontend/out/
+
+# production
+Frontend/build/
+
+# misc
+Frontend/*.pem
+
+# env files
+Frontend/.env*
+
+# vercel
+Frontend/.vercel
+
+# typescript
+Frontend/*.tsbuildinfo
+Frontend/next-env.d.ts
