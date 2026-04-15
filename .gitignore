@@ -29,6 +29,7 @@ Backend/.env.*
 
 # dependencies
 Frontend/node_modules/
+Frontend/.next/
 Frontend/.pnp
 Frontend/.pnp.*
 Frontend/.yarn/*
