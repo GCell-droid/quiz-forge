@@ -1,8 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useState, FormEvent } from "react";
 import { useRouter } from "next/navigation";
+import { isAxiosError } from "axios";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -21,14 +22,14 @@ import {
 } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 
-export function LoginForm({
+export function SignupForm({
   className,
   ...props
 }: React.ComponentProps<"div">) {
   const router = useRouter();
 
   const [loading, setLoading] = useState(false);
-  const [googleLoading, setGoogleLoading] = useState(false); // ✅ added
+  const [googleLoading, setGoogleLoading] = useState(false);
   const [error, setError] = useState("");
 
   const handleGoogleLogin = () => {
@@ -36,25 +37,32 @@ export function LoginForm({
     window.location.href = `${process.env.NEXT_PUBLIC_BACKEND_URL}/auth/google`;
   };
 
-  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+  async function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setError("");
     setLoading(true);
 
     const formData = new FormData(e.currentTarget);
-
+    const name = formData.get("name");
     const email = formData.get("email");
     const password = formData.get("password");
+    const role = formData.get("role");
 
     try {
-      await api.post("/auth/login", {
+      await api.post("/auth/register", {
+        name,
         email,
         password,
+        role,
       });
 
       router.push("/dashboard");
-    } catch (err: any) {
-      setError(err.response?.data?.message || "Login failed");
+    } catch (err: unknown) {
+      if (isAxiosError(err)) {
+        setError(err.response?.data?.message || "Signup failed");
+      } else {
+        setError("An unexpected error occurred");
+      }
     } finally {
       setLoading(false);
     }
@@ -64,13 +72,24 @@ export function LoginForm({
     <div className={cn("flex flex-col gap-6", className)} {...props}>
       <Card>
         <CardHeader>
-          <CardTitle>Login</CardTitle>
-          <CardDescription>Enter your email</CardDescription>
+          <CardTitle>Sign Up</CardTitle>
+          <CardDescription>Create a new account</CardDescription>
         </CardHeader>
 
         <CardContent>
           <form onSubmit={handleSubmit}>
             <FieldGroup>
+              <Field>
+                <FieldLabel htmlFor="name">Name</FieldLabel>
+                <Input
+                  id="name"
+                  name="name"
+                  type="text"
+                  placeholder="John Doe"
+                  required
+                />
+              </Field>
+
               <Field>
                 <FieldLabel htmlFor="email">Email</FieldLabel>
                 <Input
@@ -83,10 +102,33 @@ export function LoginForm({
               </Field>
 
               <Field>
+                <FieldLabel htmlFor="role">Role</FieldLabel>
+                <select
+                  id="role"
+                  name="role"
+                  className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+                  required
+                  defaultValue="user"
+                >
+                  <option
+                    value="user"
+                    className="bg-background text-foreground"
+                  >
+                    User
+                  </option>
+                  <option
+                    value="admin"
+                    className="bg-background text-foreground"
+                  >
+                    Admin
+                  </option>
+                </select>
+              </Field>
+
+              <Field>
                 <div className="flex items-center">
                   <FieldLabel htmlFor="password">Password</FieldLabel>
                 </div>
-
                 <Input
                   id="password"
                   name="password"
@@ -105,7 +147,7 @@ export function LoginForm({
                   className="w-full"
                   disabled={loading}
                 >
-                  {loading ? "Logging in..." : "Login"}
+                  {loading ? "Signing up..." : "Sign Up"}
                 </Button>
 
                 <Button
@@ -113,17 +155,17 @@ export function LoginForm({
                   type="button"
                   className="w-full mt-2"
                   onClick={handleGoogleLogin}
-                  disabled={googleLoading} // ✅ added
+                  disabled={googleLoading}
                 >
                   {googleLoading
                     ? "Redirecting..."
-                    : "Login with Google"}
+                    : "Sign up with Google"}
                 </Button>
 
                 <FieldDescription className="text-center mt-2">
-                  Don&apos;t have an account?{" "}
-                  <Link href="/signup" className="underline">
-                    Sign up
+                  Already have an account?{" "}
+                  <Link href="/login" className="underline">
+                    Login
                   </Link>
                 </FieldDescription>
               </Field>
