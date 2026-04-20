@@ -10,15 +10,16 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { AuthService } from './auth.service';
-import { LoginDto } from './dto/login.dto';
 import { RegisterDTO } from './dto/register.dto';
 import type { Request, Response } from 'express';
 import { jwtAuthGuard } from './guards/jwtguard/jwt-auth.guard';
 import { ConfigService } from '@nestjs/config';
-import { GoogleOrJwtAuthGuard } from './guards/combinedGuard/combined-auth.guard';
 import { Roles } from './decorators/roles.decorator';
-import { UserRole } from './entity/user.entity';
 import { RoleGuard } from './guards/roles-guard/roles.guard';
+import { UserRole } from 'src/common/enums/enum';
+// LOGIC CHANGE: Fixed import based on previous steps
+import { AuthGuard } from '@nestjs/passport'; // LOGIC CHANGE: Imported standard AuthGuard
+import LoginDto from './dto/login.dto';
 
 @Controller('auth')
 export class AuthController {
@@ -26,40 +27,44 @@ export class AuthController {
     private readonly authService: AuthService,
     private readonly configService: ConfigService,
   ) {}
-  @Roles(UserRole.STUDENT) //set roles metadata that is required
+
+  @Roles(UserRole.TEACHER)
   @UseGuards(jwtAuthGuard, RoleGuard)
   @Get('/test')
   serverTest() {
     return 'Server Running ';
   }
-  @UseGuards(GoogleOrJwtAuthGuard)
+
+  @UseGuards(AuthGuard('google'))
   @Get('/google')
   googleSignIn() {}
 
-  @UseGuards(GoogleOrJwtAuthGuard)
+  @UseGuards(AuthGuard('google'))
   @Get('/google/callback')
   googleCallback(
     @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
   ) {
-    const { user, tokens, needsRole, email } = req.user as any;
+    const { tokens, needsRole } = req.user as any;
     const frontendUrl = this.configService.get<string>('FRONTEND_URL');
-    // set cookies
-    res.cookie('jwt', tokens?.accessToken, {
-      httpOnly: true,
-      secure: false,
-      sameSite: 'lax',
-      signed: true,
-      maxAge: 15 * 60 * 1000,
-    });
 
-    res.cookie('refresh_token', tokens?.refreshToken, {
-      httpOnly: true,
-      secure: false,
-      signed: true,
-      sameSite: 'lax',
-      maxAge: 7 * 24 * 60 * 60 * 1000,
-    });
+    if (tokens) {
+      res.cookie('jwt', tokens.accessToken, {
+        httpOnly: true,
+        secure: false,
+        sameSite: 'lax',
+        signed: true,
+        maxAge: 15 * 60 * 1000,
+      });
+
+      res.cookie('refresh_token', tokens.refreshToken, {
+        httpOnly: true,
+        secure: false,
+        signed: true,
+        sameSite: 'lax',
+        maxAge: 7 * 24 * 60 * 60 * 1000,
+      });
+    }
 
     if (needsRole) {
       return res.redirect(`${frontendUrl}/profile/edit`);
@@ -80,9 +85,10 @@ export class AuthController {
   register(@Body() registerdto: RegisterDTO) {
     return this.authService.register(registerdto);
   }
+
   @UseGuards(jwtAuthGuard)
   @Get('/logout')
-  logout(@Res() res: Response) {
+  logout(@Res({ passthrough: true }) res: Response) {
     res.clearCookie('jwt', {
       httpOnly: true,
       secure: false,
@@ -94,11 +100,13 @@ export class AuthController {
       secure: false,
       sameSite: 'lax',
     });
+
+    return { message: 'Logged out successfully' };
   }
 
   @UseGuards(jwtAuthGuard)
   @Get('/me')
-  me(@Res() res: Response) {
-    return res.send({ message: 'You are logged In' });
+  me(@Res({ passthrough: true }) res: Response) {
+    return { message: 'You are logged In' };
   }
 }

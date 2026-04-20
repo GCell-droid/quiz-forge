@@ -5,7 +5,7 @@ import googleOauthConfig from './config/google-oauth-config';
 import { ConfigModule } from '@nestjs/config';
 import { GoogleStrategy } from './strategy/google.strategy';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { UserEntity } from './entity/user.entity';
+import UserEntity from '../common/entity/user.entity';
 import { PassportModule } from '@nestjs/passport';
 import { JwtModule } from '@nestjs/jwt';
 import { JwtStrategy } from './strategy/jwt-strategy';

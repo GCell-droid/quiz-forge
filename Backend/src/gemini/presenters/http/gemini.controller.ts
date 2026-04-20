@@ -11,8 +11,8 @@ import { GenerateQuizDto } from '../../dto/generate-quiz.dto';
 import { GoogleOrJwtAuthGuard } from 'src/auth/guards/combinedGuard/combined-auth.guard';
 import { RoleGuard } from 'src/auth/guards/roles-guard/roles.guard';
 import { Roles } from 'src/auth/decorators/roles.decorator';
-import { UserRole } from 'src/auth/entity/user.entity';
 import { GeminiThrottle } from 'src/gemini/guards/gemini-throttle.guard';
+import { UserRole } from 'src/common/enums/enum';
 
 @Controller('gemini')
 export class GeminiController {
