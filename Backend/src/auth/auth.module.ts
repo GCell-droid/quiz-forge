@@ -11,7 +11,6 @@ import { JwtModule } from '@nestjs/jwt';
 import { JwtStrategy } from './strategy/jwt-strategy';
 import { RoleGuard } from './guards/roles-guard/roles.guard';
 import { jwtAuthGuard } from './guards/jwtguard/jwt-auth.guard';
-import { GoogleOrJwtAuthGuard } from './guards/combinedGuard/combined-auth.guard';
 
 @Module({
   imports: [
@@ -27,8 +26,7 @@ import { GoogleOrJwtAuthGuard } from './guards/combinedGuard/combined-auth.guard
     JwtStrategy,
     RoleGuard,
     jwtAuthGuard,
-    GoogleOrJwtAuthGuard,
   ],
-  exports: [AuthService, RoleGuard, jwtAuthGuard, GoogleOrJwtAuthGuard],
+  exports: [AuthService, RoleGuard, jwtAuthGuard],
 })
 export class AuthModule {}

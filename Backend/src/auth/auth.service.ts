@@ -164,6 +164,17 @@ export class AuthService {
     });
 
     if (existingUser) {
+      // SECURITY FIX: Pre-Account Takeover Protection
+      // If the account was created manually (it has a password but no oauthProvider)
+      // and now the real owner is logging in via Google, we must evict the attacker.
+      if (!existingUser.oauthProvider || existingUser.passwordHash !== '') {
+        // 1. Wipe the attacker's password so they lose access
+        existingUser.passwordHash = '';
+        // 2. Mark the account as strictly a Google account now
+        existingUser.oauthProvider = 'google';
+        await this.userRepository.save(existingUser);
+      }
+
       const tokens = this.generateToken(existingUser);
       const { passwordHash, ...result } = existingUser;
       return { user: result, tokens };
