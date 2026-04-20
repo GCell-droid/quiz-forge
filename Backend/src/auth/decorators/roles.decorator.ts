@@ -1,5 +1,5 @@
 import { SetMetadata } from '@nestjs/common';
-import { UserRole } from '../entity/user.entity';
+import { UserRole } from 'src/common/enums/enum';
 //unique identifier for storing and retrieving role requirements as metadata on route handler
 export const ROLES_KEY = 'roles';
 //role decorator marks the routes with roles that are allowed to access them

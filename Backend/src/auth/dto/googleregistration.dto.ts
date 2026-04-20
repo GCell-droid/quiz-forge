@@ -11,4 +11,8 @@ export class GoogleRegisterDTO {
   @IsOptional()
   @IsNotEmpty()
   role: string;
+  @IsNotEmpty()
+  oauthId: number;
+  @IsNotEmpty()
+  oauthProvider: string;
 }

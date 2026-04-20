@@ -3,8 +3,6 @@ import { ScheduleModule } from '@nestjs/schedule';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ConfigModule } from '@nestjs/config';
 import { AuthModule } from './auth/auth.module';
-import { QuizModule } from './quiz/quiz.module';
-import { StudentSideModule } from './student-side/student-side.module';
 import { GeminiModule } from './gemini/gemini.module';
 import { ThrottlerModule } from '@nestjs/throttler';
 
@@ -26,11 +24,10 @@ import { ThrottlerModule } from '@nestjs/throttler';
       },
       autoLoadEntities: true,
       synchronize: true,
+      // dropSchema: true,
     }),
     ScheduleModule.forRoot(),
     AuthModule,
-    QuizModule,
-    StudentSideModule,
     GeminiModule,
   ],
 })

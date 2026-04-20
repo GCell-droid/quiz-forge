@@ -3,29 +3,30 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
 import {
   ConflictException,
-  ForbiddenException,
   Injectable,
   UnauthorizedException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { Repository } from 'typeorm';
-import { UserEntity, UserRole } from './entity/user.entity';
 import { InjectRepository } from '@nestjs/typeorm';
 import { ConfigService } from '@nestjs/config';
 import { RegisterDTO } from './dto/register.dto';
 import bcrypt from 'bcrypt';
-import { LoginDto } from './dto/login.dto';
 import { GoogleRegisterDTO } from './dto/googleregistration.dto';
 import type { Request, Response } from 'express';
-import { ExceptionsHandler } from '@nestjs/core/exceptions/exceptions-handler';
+import { UserRole } from 'src/common/enums/enum';
+import User from 'src/common/entity/user.entity';
+import LoginDto from './dto/login.dto';
+
 @Injectable()
 export class AuthService {
   constructor(
-    @InjectRepository(UserEntity)
-    private readonly userRepository: Repository<UserEntity>,
+    @InjectRepository(User)
+    private readonly userRepository: Repository<User>,
     private jwtService: JwtService,
     private readonly configService: ConfigService,
   ) {}
+
   async register(registerdto: RegisterDTO) {
     try {
       const existingUser = await this.userRepository.findOne({
@@ -36,15 +37,18 @@ export class AuthService {
           "Can't Register the User. Conflicting Email!",
         );
       }
-      const hashedPassword = await this.hashPassword(registerdto.password);
+      // FIXED: Added ! to satisfy strict null checks
+      const hashedPassword = await this.hashPassword(registerdto.password!);
+
       const newUser = this.userRepository.create({
         name: registerdto.name,
         email: registerdto.email,
-        password: hashedPassword,
+        passwordHash: hashedPassword, // FIXED: Matches your DB entity 'passwordHash'
         role: registerdto.role,
       });
       const savedUser = await this.userRepository.save(newUser);
-      const { password, ...result } = savedUser;
+
+      const { passwordHash, ...result } = savedUser; // FIXED: Destructure passwordHash
       return { user: result, message: 'User Registered Please Login' };
     } catch (err) {
       throw new ConflictException('Registration failed');
@@ -58,33 +62,38 @@ export class AuthService {
   async login(logindto: LoginDto, request: Request, res: Response) {
     try {
       const token = request?.signedCookies?.jwt;
-      const payload = this.jwtService.verify(token, {
-        secret: this.configService.get<string>('JWT_SECRET'),
-      });
-      const user = await this.userRepository.findOne({
-        where: { id: payload.sub },
-      });
 
-      if (user) {
-        const { password, ...result } = user;
-        return {
-          message: 'Already logged',
-          user: result,
-        };
+      if (token) {
+        const payload = this.jwtService.verify(token, {
+          secret: this.configService.get<string>('JWT_SECRET'),
+        });
+        const user = await this.userRepository.findOne({
+          where: { uid: payload.sub as any },
+        });
+
+        if (user) {
+          const { passwordHash, ...result } = user;
+          return {
+            message: 'Already logged',
+            user: result,
+          };
+        }
       }
+      throw new Error('No valid session');
     } catch (err) {
       const user = await this.userRepository.findOne({
         where: { email: logindto.email },
       });
+
       if (
         !user ||
-        !(await this.verifyPassword(logindto.password, user.password))
+        !user.passwordHash || // FIXED: Matches your DB entity 'passwordHash'
+        !(await this.verifyPassword(logindto.password!, user.passwordHash))
       ) {
         throw new UnauthorizedException('Invalid Credentials');
       }
-      //generate tokens
       const tokens = this.generateToken(user);
-      const { password, ...result } = user;
+      const { passwordHash, ...result } = user;
       this.setAuthCookies(tokens, res);
       return {
         message: 'Login Sucess',
@@ -92,20 +101,22 @@ export class AuthService {
       };
     }
   }
+
   async verifyPassword(password: string, dbpassword: string): Promise<boolean> {
     return await bcrypt.compare(password, dbpassword);
   }
-  private generateToken(user: UserEntity) {
+
+  private generateToken(user: User) {
     return {
       accessToken: this.generateAccessToken(user),
       refreshToken: this.generateRefreshToken(user),
     };
   }
-  private generateAccessToken(user: UserEntity): string {
-    //token will have : email, sub(id), role ->for role based authentication
+
+  private generateAccessToken(user: User): string {
     const payload = {
       email: user.email,
-      sub: user.id,
+      sub: user.uid, // FIXED: Matches your DB entity 'uid'
       role: user.role,
     };
     const jwtSecret = this.configService.get<string>('JWT_SECRET');
@@ -114,9 +125,10 @@ export class AuthService {
       expiresIn: '15m',
     });
   }
-  private generateRefreshToken(user: UserEntity): string {
+
+  private generateRefreshToken(user: User): string {
     const payload = {
-      sub: user.id,
+      sub: user.uid, // FIXED: Matches your DB entity 'uid'
     };
     const jwtSecret = this.configService.get<string>('JWT_SECRET');
     return this.jwtService.sign(payload, {
@@ -124,6 +136,7 @@ export class AuthService {
       expiresIn: '7d',
     });
   }
+
   async refreshToken(refreshToken: string) {
     try {
       const jwtSecret = this.configService.get<string>('JWT_SECRET');
@@ -135,7 +148,7 @@ export class AuthService {
         throw new UnauthorizedException('Invalid Token');
       }
       const user = await this.userRepository.findOne({
-        where: { id: payload.sub },
+        where: { uid: payload.sub as any },
       });
       if (!user) throw new UnauthorizedException('Invalid Token');
       const accessToken = this.generateAccessToken(user);
@@ -152,35 +165,37 @@ export class AuthService {
 
     if (existingUser) {
       const tokens = this.generateToken(existingUser);
-      const { password, ...result } = existingUser;
+      const { passwordHash, ...result } = existingUser;
       return { user: result, tokens };
     }
 
     if (!role) {
-      // return a consistent object
       return { needsRole: true, email: googleUser.email };
     }
 
-    // Save new user with selected role
     const newUser = this.userRepository.create({
       name: googleUser.name,
       email: googleUser.email,
-      password: '',
+      passwordHash: '', // FIXED: Matches your DB entity 'passwordHash'
       role,
+      oauthProvider: 'google',
     });
+
     const savedUser = await this.userRepository.save(newUser);
 
-    const { password, ...result } = savedUser;
+    const { passwordHash, ...result } = savedUser;
     const tokens = this.generateToken(savedUser);
     return { user: result, tokens };
   }
 
-  async getUserById(Userid: number) {
-    const user = await this.userRepository.findOne({ where: { id: Userid } });
+  async getUserById(Userid: number | string) {
+    const user = await this.userRepository.findOne({
+      where: { uid: Userid as any },
+    }); // FIXED: Matches your DB entity 'uid'
     if (!user) {
       throw new Error('User not found');
     }
-    const { password, ...result } = user;
+    const { passwordHash, ...result } = user;
     return result;
   }
 
@@ -192,7 +207,7 @@ export class AuthService {
       httpOnly: true,
       secure: false,
       sameSite: 'lax',
-      maxAge: 15 * 60 * 1000, // 15 minutes
+      maxAge: 15 * 60 * 1000,
       signed: true,
     });
 
@@ -200,7 +215,7 @@ export class AuthService {
       httpOnly: true,
       secure: false,
       sameSite: 'lax',
-      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+      maxAge: 7 * 24 * 60 * 60 * 1000,
       signed: true,
     });
   }

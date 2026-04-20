@@ -111,16 +111,16 @@ export function SignupForm({
                   defaultValue="user"
                 >
                   <option
-                    value="user"
+                    value="teacher"
                     className="bg-background text-foreground"
                   >
-                    User
+                    Teacher
                   </option>
                   <option
-                    value="admin"
+                    value="student"
                     className="bg-background text-foreground"
                   >
-                    Admin
+                    Student
                   </option>
                 </select>
               </Field>
