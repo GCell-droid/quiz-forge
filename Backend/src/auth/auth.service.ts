@@ -37,19 +37,23 @@ export class AuthService {
           "Can't Register the User. Conflicting Email!",
         );
       }
-      // FIXED: Added ! to satisfy strict null checks
       const hashedPassword = await this.hashPassword(registerdto.password!);
 
       const newUser = this.userRepository.create({
         name: registerdto.name,
         email: registerdto.email,
-        passwordHash: hashedPassword, // FIXED: Matches your DB entity 'passwordHash'
+        passwordHash: hashedPassword,
         role: registerdto.role,
       });
       const savedUser = await this.userRepository.save(newUser);
 
-      const { passwordHash, ...result } = savedUser; // FIXED: Destructure passwordHash
-      return { user: result, message: 'User Registered Please Login' };
+      const { passwordHash, ...result } = savedUser;
+      const tokens = this.generateToken(savedUser);
+      return {
+        user: result,
+        needsRole: false,
+        messsage: 'Registration Successfull',
+      };
     } catch (err) {
       throw new ConflictException('Registration failed');
     }
@@ -64,18 +68,17 @@ export class AuthService {
       const token = request?.signedCookies?.jwt;
 
       if (token) {
-        const payload = this.jwtService.verify(token, {
+        const payload = this.jwtService.verify(token as string, {
           secret: this.configService.get<string>('JWT_SECRET'),
         });
         const user = await this.userRepository.findOne({
-          where: { uid: payload.sub as any },
+          where: { uid: payload.sub as string },
         });
 
         if (user) {
           const { passwordHash, ...result } = user;
           return {
             message: 'Already logged',
-            user: result,
           };
         }
       }
@@ -87,8 +90,8 @@ export class AuthService {
 
       if (
         !user ||
-        !user.passwordHash || // FIXED: Matches your DB entity 'passwordHash'
-        !(await this.verifyPassword(logindto.password!, user.passwordHash))
+        !user.passwordHash ||
+        !(await this.verifyPassword(logindto.password, user.passwordHash))
       ) {
         throw new UnauthorizedException('Invalid Credentials');
       }
@@ -116,7 +119,7 @@ export class AuthService {
   private generateAccessToken(user: User): string {
     const payload = {
       email: user.email,
-      sub: user.uid, // FIXED: Matches your DB entity 'uid'
+      sub: user.uid,
       role: user.role,
     };
     const jwtSecret = this.configService.get<string>('JWT_SECRET');
@@ -128,7 +131,7 @@ export class AuthService {
 
   private generateRefreshToken(user: User): string {
     const payload = {
-      sub: user.uid, // FIXED: Matches your DB entity 'uid'
+      sub: user.uid,
     };
     const jwtSecret = this.configService.get<string>('JWT_SECRET');
     return this.jwtService.sign(payload, {
@@ -164,13 +167,9 @@ export class AuthService {
     });
 
     if (existingUser) {
-      // SECURITY FIX: Pre-Account Takeover Protection
-      // If the account was created manually (it has a password but no oauthProvider)
-      // and now the real owner is logging in via Google, we must evict the attacker.
+      // Pre-Account Takeover Protection
       if (!existingUser.oauthProvider || existingUser.passwordHash !== '') {
-        // 1. Wipe the attacker's password so they lose access
         existingUser.passwordHash = '';
-        // 2. Mark the account as strictly a Google account now
         existingUser.oauthProvider = 'google';
         await this.userRepository.save(existingUser);
       }
@@ -180,14 +179,10 @@ export class AuthService {
       return { user: result, tokens };
     }
 
-    if (!role) {
-      return { needsRole: true, email: googleUser.email };
-    }
-
     const newUser = this.userRepository.create({
       name: googleUser.name,
       email: googleUser.email,
-      passwordHash: '', // FIXED: Matches your DB entity 'passwordHash'
+      passwordHash: '',
       role,
       oauthProvider: 'google',
     });
@@ -196,13 +191,21 @@ export class AuthService {
 
     const { passwordHash, ...result } = savedUser;
     const tokens = this.generateToken(savedUser);
-    return { user: result, tokens };
+    if (!role) {
+      return { user: result, tokens, needsRole: true };
+    }
+    return {
+      user: result,
+      tokens,
+      needsRole: false,
+      messsage: 'Registration/Login from Google Successfull',
+    };
   }
 
   async getUserById(Userid: number | string) {
     const user = await this.userRepository.findOne({
       where: { uid: Userid as any },
-    }); // FIXED: Matches your DB entity 'uid'
+    });
     if (!user) {
       throw new Error('User not found');
     }
@@ -210,7 +213,7 @@ export class AuthService {
     return result;
   }
 
-  private setAuthCookies(
+  public setAuthCookies(
     tokens: { accessToken: string; refreshToken: string },
     res: Response,
   ) {
@@ -228,6 +231,20 @@ export class AuthService {
       sameSite: 'lax',
       maxAge: 7 * 24 * 60 * 60 * 1000,
       signed: true,
+    });
+  }
+
+  public logout(res: Response) {
+    res.clearCookie('jwt', {
+      httpOnly: true,
+      secure: false,
+      sameSite: 'lax',
+    });
+
+    res.clearCookie('refresh_token', {
+      httpOnly: true,
+      secure: false,
+      sameSite: 'lax',
     });
   }
 }

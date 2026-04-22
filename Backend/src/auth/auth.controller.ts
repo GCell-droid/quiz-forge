@@ -17,8 +17,7 @@ import { ConfigService } from '@nestjs/config';
 import { Roles } from './decorators/roles.decorator';
 import { RoleGuard } from './guards/roles-guard/roles.guard';
 import { UserRole } from 'src/common/enums/enum';
-// LOGIC CHANGE: Fixed import based on previous steps
-import { AuthGuard } from '@nestjs/passport'; // LOGIC CHANGE: Imported standard AuthGuard
+import { AuthGuard } from '@nestjs/passport';
 import LoginDto from './dto/login.dto';
 
 @Controller('auth')
@@ -38,34 +37,17 @@ export class AuthController {
   @UseGuards(AuthGuard('google'))
   @Get('/google')
   googleSignIn() {}
-
   @UseGuards(AuthGuard('google'))
   @Get('/google/callback')
   googleCallback(
     @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
   ) {
-    const { tokens, needsRole } = req.user as any;
+    const { tokens, needsRole, message } = req.user as any;
     const frontendUrl = this.configService.get<string>('FRONTEND_URL');
-
     if (tokens) {
-      res.cookie('jwt', tokens.accessToken, {
-        httpOnly: true,
-        secure: false,
-        sameSite: 'lax',
-        signed: true,
-        maxAge: 15 * 60 * 1000,
-      });
-
-      res.cookie('refresh_token', tokens.refreshToken, {
-        httpOnly: true,
-        secure: false,
-        signed: true,
-        sameSite: 'lax',
-        maxAge: 7 * 24 * 60 * 60 * 1000,
-      });
+      this.authService.setAuthCookies(tokens, res);
     }
-
     if (needsRole) {
       return res.redirect(`${frontendUrl}/profile/edit`);
     }
@@ -87,20 +69,9 @@ export class AuthController {
   }
 
   @UseGuards(jwtAuthGuard)
-  @Get('/logout')
+  @Post('/logout')
   logout(@Res({ passthrough: true }) res: Response) {
-    res.clearCookie('jwt', {
-      httpOnly: true,
-      secure: false,
-      sameSite: 'lax',
-    });
-
-    res.clearCookie('refresh_token', {
-      httpOnly: true,
-      secure: false,
-      sameSite: 'lax',
-    });
-
+    this.authService.logout(res);
     return { message: 'Logged out successfully' };
   }
 
