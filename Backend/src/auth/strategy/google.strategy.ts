@@ -24,18 +24,13 @@ export class GoogleStrategy extends PassportStrategy(Strategy, 'google') {
     });
   }
 
-  // Passport automatically extracts the profile, we just need to map it
   async validate(accessToken: string, refreshToken: string, profile: any) {
-    // Map the normalized passport profile to the exact fields our database expects
     const oauthUser = {
       name: profile._json.name || profile.displayName,
       email: profile._json.email || profile.emails[0].value,
       oauthId: profile.id,
       oauthProvider: profile.provider,
     };
-
-    // Pass the cleaned payload to the service.
-    // Note: We intentionally omit the password field completely.
     return this.authService.validateGoogleUser(
       oauthUser as unknown as GoogleRegisterDTO,
     );
