@@ -3,8 +3,11 @@ import {
   PrimaryGeneratedColumn,
   Column,
   CreateDateColumn,
+  OneToMany,
 } from 'typeorm';
 import { UserRole } from '../enums/enum';
+import { Quiz } from 'src/quizzes/entities/quiz.entity/quiz.entity';
+import { QuizSession } from 'src/sessions/entities/quiz-session.entity/quiz-session.entity';
 
 @Entity('UserEntity')
 export default class User {
@@ -34,4 +37,10 @@ export default class User {
 
   @CreateDateColumn()
   createdAt!: Date;
+
+  @OneToMany(() => Quiz, (quiz) => quiz.createdBy)
+  quizzes!: Quiz[];
+
+  @OneToMany(() => QuizSession, (session) => session.createdBy)
+  sessionsCreated!: QuizSession[];
 }

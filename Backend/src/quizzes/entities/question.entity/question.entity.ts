@@ -1,11 +1,6 @@
-import {
-  Entity,
-  PrimaryGeneratedColumn,
-  Column,
-  ManyToOne,
-  JoinColumn,
-} from 'typeorm';
-import { Quiz } from '../quiz.entity/quiz.entity';
+import { Entity, PrimaryGeneratedColumn, Column, OneToMany } from 'typeorm';
+import { QuizQuestion } from '../quiz-question.entity/quiz-question.entity';
+import { BundleQuestion } from '../bundle-question.entity/bundle-question.entity';
 
 export enum QuestionType {
   MULTIPLE_CHOICE = 'MULTIPLE_CHOICE',
@@ -17,10 +12,6 @@ export enum QuestionType {
 export class Question {
   @PrimaryGeneratedColumn('uuid')
   questionId!: string;
-
-  @ManyToOne(() => Quiz, (quiz) => quiz.questions, { onDelete: 'CASCADE' })
-  @JoinColumn({ name: 'quizId' })
-  quiz!: Quiz;
 
   @Column({ type: 'text' })
   title!: string;
@@ -37,6 +28,9 @@ export class Question {
   @Column({ type: 'int', default: 1 })
   points!: number;
 
-  @Column({ type: 'int' })
-  displayOrder!: number;
+  @OneToMany(() => QuizQuestion, (qq) => qq.question)
+  quizQuestions!: QuizQuestion[];
+
+  @OneToMany(() => BundleQuestion, (bq) => bq.question)
+  bundleQuestions!: BundleQuestion[];
 }

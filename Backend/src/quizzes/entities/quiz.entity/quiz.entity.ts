@@ -9,7 +9,7 @@ import {
   JoinColumn,
   OneToMany,
 } from 'typeorm';
-import { Question } from '../question.entity/question.entity';
+import { QuizQuestion } from '../quiz-question.entity/quiz-question.entity';
 
 export enum QuizStatus {
   DRAFT = 'DRAFT',
@@ -56,6 +56,6 @@ export class Quiz {
   @UpdateDateColumn()
   updatedAt!: Date;
 
-  @OneToMany(() => Question, (question) => question.quiz)
-  questions!: Question[];
+  @OneToMany(() => QuizQuestion, (quizQuestion) => quizQuestion.quiz)
+  quizQuestions!: QuizQuestion[];
 }
