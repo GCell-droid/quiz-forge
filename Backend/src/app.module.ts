@@ -5,6 +5,11 @@ import { ConfigModule } from '@nestjs/config';
 import { AuthModule } from './auth/auth.module';
 import { GeminiModule } from './gemini/gemini.module';
 import { ThrottlerModule } from '@nestjs/throttler';
+import { QuizzesModule } from './quizzes/quizzes.module';
+import { SessionsModule } from './sessions/sessions.module';
+import { ResponsesModule } from './responses/responses.module';
+import { AnalyticsModule } from './analytics/analytics.module';
+import { UsersModule } from './user/user.module';
 
 @Module({
   imports: [
@@ -29,6 +34,11 @@ import { ThrottlerModule } from '@nestjs/throttler';
     ScheduleModule.forRoot(),
     AuthModule,
     GeminiModule,
+    QuizzesModule,
+    SessionsModule,
+    ResponsesModule,
+    AnalyticsModule,
+    UsersModule,
   ],
 })
 export class AppModule {}

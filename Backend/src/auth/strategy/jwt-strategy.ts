@@ -30,21 +30,15 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     });
   }
 
-  async validate(payload: JwtPayload) {
-    if (!payload || !payload?.sub) {
+  validate(payload: JwtPayload) {
+    if (!payload?.sub) {
       throw new UnauthorizedException('Invalid Token Payload');
     }
 
-    const user = await this.authService.getUserById(payload.sub);
-
-    if (!user) {
-      throw new UnauthorizedException('User not found');
-    }
-
     return {
-      ...user,
-      role: user.role,
-      isrole: true,
+      userId: payload.sub, // UUID from token
+      email: payload.email,
+      role: payload.role,
     };
   }
 }
