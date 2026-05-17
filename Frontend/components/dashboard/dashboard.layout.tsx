@@ -8,12 +8,7 @@ import { ControlsCard } from "./controls-card";
 export function DashboardLayout() {
   return (
     <div className="p-6 grid gap-6 md:grid-cols-3">
-      {/* <StatsCard /> */}
       <ControlsCard />
-      {/* <EnvCard /> */}
-
-      {/* <StatsCard /> */}
-      {/* <TrafficChart /> */}
     </div>
   );
 }
