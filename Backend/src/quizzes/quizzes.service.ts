@@ -5,323 +5,104 @@ import {
   ForbiddenException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { QuestionBundle } from './entities/question-bundle.entity/question-bundle.entity';
-import { BundleQuestion } from './entities/bundle-question.entity/bundle-question.entity';
+import { Repository, DataSource } from 'typeorm';
 import { Quiz } from './entities/quiz.entity/quiz.entity';
 import { Question } from './entities/question.entity/question.entity';
 import { QuizQuestion } from './entities/quiz-question.entity/quiz-question.entity';
-import {
-  CreateQuestionBundleDto,
-  UpdateQuestionBundleDto,
-  CreateBundleQuestionDto,
-  UpdateBundleQuestionDto,
-} from './dto/bundle.dto';
-import {
-  CreateQuizDto,
-  UpdateQuizDto,
-  CreateQuizQuestionDto,
-  UpdateQuizQuestionDto,
-} from './dto/quiz.dto';
+import { CreateQuizDto, UpdateQuizDto } from './dto/quiz.dto';
+import { CreateQuestionDto, UpdateQuestionDto } from './dto/question.dto';
 import User from '../common/entity/user.entity';
+import { BundlesService } from './bundles.service';
 
 @Injectable()
 export class QuizzesService {
   constructor(
-    @InjectRepository(QuestionBundle)
-    private readonly bundleRepo: Repository<QuestionBundle>,
-    @InjectRepository(BundleQuestion)
-    private readonly bundleQuestionRepo: Repository<BundleQuestion>,
     @InjectRepository(Quiz)
     private readonly quizRepo: Repository<Quiz>,
-    @InjectRepository(Question)
-    private readonly questionRepo: Repository<Question>,
     @InjectRepository(QuizQuestion)
     private readonly quizQuestionRepo: Repository<QuizQuestion>,
+    private readonly bundlesService: BundlesService,
+    private readonly dataSource: DataSource,
   ) {}
-
-  // --- QUESTION BUNDLE METHODS ---
-
-  async createBundle(userId: string, data: CreateQuestionBundleDto) {
-    const bundle = this.bundleRepo.create({
-      title: data.title,
-      description: data.description,
-      visibility: data.visibility,
-      tags: data.tags,
-      createdBy: { uid: userId } as User,
-    });
-
-    const savedBundle = await this.bundleRepo.save(bundle);
-
-    if (data.questions && data.questions.length > 0) {
-      for (let i = 0; i < data.questions.length; i++) {
-        const qData = data.questions[i];
-
-        // 1. Create independent Question entity
-        const question = this.questionRepo.create({
-          title: qData.title,
-          type: qData.type,
-          options: qData.options,
-          correctAnswer: qData.correctAnswer,
-          points: qData.points ?? 1,
-        });
-        const savedQuestion = await this.questionRepo.save(question);
-
-        // 2. Create bridge entity mapping Bundle <-> Question
-        const bundleQuestion = this.bundleQuestionRepo.create({
-          bundle: savedBundle,
-          question: savedQuestion,
-          displayOrder: qData.displayOrder ?? i + 1,
-        });
-        await this.bundleQuestionRepo.save(bundleQuestion);
-      }
-    }
-
-    return this.getBundle(savedBundle.bundleId);
-  }
-
-  async getBundle(bundleId: string) {
-    const bundle = await this.bundleRepo
-      .createQueryBuilder('bundle')
-      .where('bundle.bundleId = :bundleId', { bundleId })
-      .leftJoinAndSelect('bundle.questions', 'bundleQuestions')
-      .leftJoinAndSelect('bundleQuestions.question', 'question')
-      .leftJoin('bundle.createdBy', 'createdBy')
-      .addSelect(['createdBy.uid', 'createdBy.name', 'createdBy.email'])
-      .getOne();
-
-    if (!bundle) throw new NotFoundException('Bundle not found');
-
-    // Sort questions by displayOrder before returning
-    if (bundle.questions) {
-      bundle.questions.sort((a, b) => a.displayOrder - b.displayOrder);
-    }
-    return bundle;
-  }
-
-  async getAllBundles(userId?: string, searchTags?: string[]) {
-    const query = this.bundleRepo
-      .createQueryBuilder('bundle')
-      .leftJoinAndSelect('bundle.questions', 'bundleQuestions')
-      .leftJoinAndSelect('bundleQuestions.question', 'question')
-      .leftJoin('bundle.createdBy', 'createdBy')
-      .addSelect(['createdBy.uid', 'createdBy.name', 'createdBy.email']);
-
-    if (userId) {
-      // If a specific userId is requested, show their bundles
-      query.andWhere('bundle.createdBy = :userId', { userId });
-    } else {
-      // If we are browsing (no userId), only show PUBLIC bundles
-      query.andWhere('bundle.visibility = :visibility', {
-        visibility: 'PUBLIC',
-      });
-    }
-
-    if (searchTags && searchTags.length > 0) {
-      // Find bundles that have AT LEAST ONE matching tag (fast search using GIN index)
-      const tagConditions = searchTags.map(
-        (tag, index) => `:tag${index} = ANY(bundle.tags)`,
-      );
-      const params = {};
-      searchTags.forEach((tag, index) => {
-        params[`tag${index}`] = tag;
-      });
-      query.andWhere(`(${tagConditions.join(' OR ')})`, params);
-    }
-
-    return query.getMany();
-  }
-
-  async updateBundle(
-    userId: string,
-    bundleId: string,
-    data: UpdateQuestionBundleDto,
-  ) {
-    const bundle = await this.getBundle(bundleId);
-    if (bundle.createdBy.uid !== userId) {
-      throw new ForbiddenException('You can only edit your own bundles');
-    }
-    await this.bundleRepo.update(bundleId, data);
-    return this.getBundle(bundleId);
-  }
-
-  async deleteBundle(userId: string, bundleId: string) {
-    const bundle = await this.getBundle(bundleId);
-    if (bundle.createdBy.uid !== userId) {
-      throw new ForbiddenException('You can only delete your own bundles');
-    }
-    await this.bundleRepo.delete(bundleId);
-    return { message: 'Bundle deleted successfully' };
-  }
-
-  async addQuestionToBundle(
-    userId: string,
-    bundleId: string,
-    data: CreateBundleQuestionDto,
-  ) {
-    const bundle = await this.getBundle(bundleId);
-    if (bundle.createdBy.uid !== userId) {
-      throw new ForbiddenException(
-        'You can only add questions to your own bundles',
-      );
-    }
-
-    // 1. Create the base question
-    const question = this.questionRepo.create({
-      title: data.title,
-      type: data.type,
-      options: data.options,
-      correctAnswer: data.correctAnswer,
-      points: data.points ?? 1,
-    });
-    const savedQuestion = await this.questionRepo.save(question);
-
-    // 2. Create the bridge record
-    const bundleQuestion = this.bundleQuestionRepo.create({
-      bundle,
-      question: savedQuestion,
-      displayOrder: data.displayOrder ?? bundle.questions.length + 1,
-    });
-
-    return this.bundleQuestionRepo.save(bundleQuestion);
-  }
-
-  async updateBundleQuestion(
-    userId: string,
-    bridgeId: string,
-    data: UpdateBundleQuestionDto,
-  ) {
-    const bundleQuestion = await this.bundleQuestionRepo.findOne({
-      where: { id: bridgeId },
-      relations: ['question', 'bundle', 'bundle.createdBy'],
-    });
-
-    if (!bundleQuestion)
-      throw new NotFoundException('Bundle question bridge not found');
-    if (bundleQuestion.bundle.createdBy.uid !== userId) {
-      throw new ForbiddenException(
-        'You can only edit questions in your own bundles',
-      );
-    }
-
-    // Update base question details if provided
-    if (
-      data.title ||
-      data.type ||
-      data.options ||
-      data.correctAnswer ||
-      data.points
-    ) {
-      await this.questionRepo.update(bundleQuestion.question.questionId, {
-        title: data.title ?? bundleQuestion.question.title,
-        type: data.type ?? bundleQuestion.question.type,
-        options: data.options ?? bundleQuestion.question.options,
-        correctAnswer:
-          data.correctAnswer ?? bundleQuestion.question.correctAnswer,
-        points: data.points ?? bundleQuestion.question.points,
-      });
-    }
-
-    // Update bridge details (e.g. displayOrder)
-    if (data.displayOrder !== undefined) {
-      await this.bundleQuestionRepo.update(bridgeId, {
-        displayOrder: data.displayOrder,
-      });
-    }
-
-    return this.bundleQuestionRepo.findOne({
-      where: { id: bridgeId },
-      relations: ['question'],
-    });
-  }
-
-  async deleteBundleQuestion(userId: string, bridgeId: string) {
-    const bundleQuestion = await this.bundleQuestionRepo.findOne({
-      where: { id: bridgeId },
-      relations: ['question', 'bundle', 'bundle.createdBy'],
-    });
-    if (!bundleQuestion)
-      throw new NotFoundException('Bundle question bridge not found');
-    if (bundleQuestion.bundle.createdBy.uid !== userId) {
-      throw new ForbiddenException(
-        'You can only delete questions from your own bundles',
-      );
-    }
-
-    const questionId = bundleQuestion.question.questionId;
-
-    // Delete bridge
-    await this.bundleQuestionRepo.delete(bridgeId);
-
-    // Delete base question to prevent orphaned records
-    await this.questionRepo.delete(questionId);
-
-    return { message: 'Question deleted from bundle successfully' };
-  }
-
-  // --- QUIZ METHODS ---
 
   async createQuiz(userId: string, data: CreateQuizDto) {
     let rawQuestions: any[] = [];
 
-    if (data.bundleId) {
-      // Create quiz from bundle
-      const bundle = await this.getBundle(data.bundleId);
-      if (!bundle.questions || bundle.questions.length === 0) {
-        throw new BadRequestException(
-          'Cannot create quiz from an empty bundle',
-        );
-      }
+    if (data.bundleIds && data.bundleIds.length > 0) {
+      let currentOrder = 1;
 
-      // Copy questions from bundle to the new quiz
-      rawQuestions = bundle.questions.map((bq) => ({
-        title: bq.question.title,
-        type: bq.question.type,
-        options: bq.question.options,
-        correctAnswer: bq.question.correctAnswer,
-        points: bq.question.points,
-        displayOrder: bq.displayOrder,
-      }));
+      for (const bId of data.bundleIds) {
+        const bundle = await this.bundlesService.getBundle(bId);
+        if (bundle.questions && bundle.questions.length > 0) {
+          // Sort by bundle's internal displayOrder to maintain intended order
+          const sortedQuestions = bundle.questions.sort((a, b) => a.displayOrder - b.displayOrder);
+          
+          for (const bq of sortedQuestions) {
+            rawQuestions.push({
+              title: bq.question.title,
+              type: bq.question.type,
+              options: bq.question.options,
+              correctAnswer: bq.question.correctAnswer,
+              points: bq.question.points,
+              displayOrder: currentOrder++,
+            });
+          }
+        }
+      }
+      
+      if (rawQuestions.length === 0) {
+        throw new BadRequestException('The selected bundles resulted in zero valid questions');
+      }
     } else if (data.questions && data.questions.length > 0) {
       rawQuestions = data.questions;
     } else {
       throw new BadRequestException('A quiz must have at least one question');
     }
 
-    const quiz = this.quizRepo.create({
-      title: data.title,
-      description: data.description,
-      status: data.status,
-      visibility: data.visibility,
-      tags: data.tags,
-      createdBy: { uid: userId } as User,
-    });
+    const queryRunner = this.dataSource.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
 
-    const savedQuiz = await this.quizRepo.save(quiz);
-
-    for (let i = 0; i < rawQuestions.length; i++) {
-      const qData = rawQuestions[i];
-
-      // 1. Create a NEW Question entity explicitly, deeply cloned from the bundle question
-      const question = this.questionRepo.create({
-        title: qData.title,
-        type: qData.type,
-        options: qData.options,
-        correctAnswer: qData.correctAnswer,
-        points: qData.points ?? 1,
+    try {
+      const quiz = queryRunner.manager.create(Quiz, {
+        title: data.title,
+        description: data.description,
+        status: data.status,
+        visibility: data.visibility,
+        tags: data.tags,
+        createdBy: { uid: userId } as User,
       });
-      const savedQuestion = await this.questionRepo.save(question);
 
-      // 2. Create the QuizQuestion bridge record
-      const quizQuestion = this.quizQuestionRepo.create({
-        quiz: savedQuiz,
-        question: savedQuestion,
-        displayOrder: qData.displayOrder ?? i + 1,
-      });
-      await this.quizQuestionRepo.save(quizQuestion);
+      const savedQuiz = await queryRunner.manager.save(quiz);
+
+      for (let i = 0; i < rawQuestions.length; i++) {
+        const qData = rawQuestions[i];
+
+        const question = queryRunner.manager.create(Question, {
+          title: qData.title,
+          type: qData.type,
+          options: qData.options,
+          correctAnswer: qData.correctAnswer,
+          points: qData.points ?? 1,
+        });
+        const savedQuestion = await queryRunner.manager.save(question);
+
+        const quizQuestion = queryRunner.manager.create(QuizQuestion, {
+          quiz: savedQuiz,
+          question: savedQuestion,
+          displayOrder: qData.displayOrder ?? i + 1,
+        });
+        await queryRunner.manager.save(quizQuestion);
+      }
+
+      await queryRunner.commitTransaction();
+      return this.getQuiz(savedQuiz.quizId);
+    } catch (err) {
+      await queryRunner.rollbackTransaction();
+      throw err;
+    } finally {
+      await queryRunner.release();
     }
-
-    return this.getQuiz(savedQuiz.quizId);
   }
 
   async getQuiz(quizId: string) {
@@ -336,12 +117,29 @@ export class QuizzesService {
 
     if (!quiz) throw new NotFoundException('Quiz not found');
 
-    // Sort quiz questions by displayOrder
     if (quiz.quizQuestions) {
       quiz.quizQuestions.sort((a, b) => a.displayOrder - b.displayOrder);
     }
 
     return quiz;
+  }
+
+  async getAllQuizzes(userId?: string) {
+    const query = this.quizRepo
+      .createQueryBuilder('quiz')
+      .leftJoin('quiz.createdBy', 'createdBy')
+      .addSelect(['createdBy.uid', 'createdBy.name', 'createdBy.email'])
+      .orderBy('quiz.createdAt', 'DESC');
+
+    if (userId) {
+      query.andWhere('createdBy.uid = :userId', { userId });
+    } else {
+      query.andWhere('quiz.visibility = :visibility', {
+        visibility: 'PUBLIC',
+      });
+    }
+
+    return query.getMany();
   }
 
   async updateQuiz(userId: string, quizId: string, data: UpdateQuizDto) {
@@ -365,7 +163,7 @@ export class QuizzesService {
   async addQuestionToQuiz(
     userId: string,
     quizId: string,
-    data: CreateQuizQuestionDto,
+    data: CreateQuestionDto,
   ) {
     const quiz = await this.getQuiz(quizId);
     if (quiz.createdBy.uid !== userId) {
@@ -374,32 +172,44 @@ export class QuizzesService {
       );
     }
 
-    // 1. Create the base question
-    const question = this.questionRepo.create({
-      title: data.title,
-      type: data.type,
-      options: data.options,
-      correctAnswer: data.correctAnswer,
-      points: data.points ?? 1,
-    });
-    const savedQuestion = await this.questionRepo.save(question);
+    const queryRunner = this.dataSource.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
 
-    // 2. Create the bridge record
-    const quizQuestion = this.quizQuestionRepo.create({
-      quiz,
-      question: savedQuestion,
-      displayOrder:
-        data.displayOrder ??
-        (quiz.quizQuestions ? quiz.quizQuestions.length + 1 : 1),
-    });
+    try {
+      const question = queryRunner.manager.create(Question, {
+        title: data.title,
+        type: data.type,
+        options: data.options,
+        correctAnswer: data.correctAnswer,
+        points: data.points ?? 1,
+      });
+      const savedQuestion = await queryRunner.manager.save(question);
 
-    return this.quizQuestionRepo.save(quizQuestion);
+      const quizQuestion = queryRunner.manager.create(QuizQuestion, {
+        quiz,
+        question: savedQuestion,
+        displayOrder:
+          data.displayOrder ??
+          (quiz.quizQuestions ? quiz.quizQuestions.length + 1 : 1),
+      });
+
+      const savedQuizQuestion = await queryRunner.manager.save(quizQuestion);
+
+      await queryRunner.commitTransaction();
+      return savedQuizQuestion;
+    } catch (err) {
+      await queryRunner.rollbackTransaction();
+      throw err;
+    } finally {
+      await queryRunner.release();
+    }
   }
 
   async updateQuizQuestion(
     userId: string,
     bridgeId: string,
-    data: UpdateQuizQuestionDto,
+    data: UpdateQuestionDto,
   ) {
     const quizQuestion = await this.quizQuestionRepo.findOne({
       where: { id: bridgeId },
@@ -414,35 +224,46 @@ export class QuizzesService {
       );
     }
 
-    // Update base question details if provided
-    if (
-      data.title ||
-      data.type ||
-      data.options ||
-      data.correctAnswer ||
-      data.points
-    ) {
-      await this.questionRepo.update(quizQuestion.question.questionId, {
-        title: data.title ?? quizQuestion.question.title,
-        type: data.type ?? quizQuestion.question.type,
-        options: data.options ?? quizQuestion.question.options,
-        correctAnswer:
-          data.correctAnswer ?? quizQuestion.question.correctAnswer,
-        points: data.points ?? quizQuestion.question.points,
-      });
-    }
+    const queryRunner = this.dataSource.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
 
-    // Update bridge details (e.g. displayOrder)
-    if (data.displayOrder !== undefined) {
-      await this.quizQuestionRepo.update(bridgeId, {
-        displayOrder: data.displayOrder,
-      });
-    }
+    try {
+      if (
+        data.title ||
+        data.type ||
+        data.options ||
+        data.correctAnswer ||
+        data.points
+      ) {
+        await queryRunner.manager.update(Question, quizQuestion.question.questionId, {
+          title: data.title ?? quizQuestion.question.title,
+          type: data.type ?? quizQuestion.question.type,
+          options: data.options ?? quizQuestion.question.options,
+          correctAnswer:
+            data.correctAnswer ?? quizQuestion.question.correctAnswer,
+          points: data.points ?? quizQuestion.question.points,
+        });
+      }
 
-    return this.quizQuestionRepo.findOne({
-      where: { id: bridgeId },
-      relations: ['question'],
-    });
+      if (data.displayOrder !== undefined) {
+        await queryRunner.manager.update(QuizQuestion, bridgeId, {
+          displayOrder: data.displayOrder,
+        });
+      }
+
+      await queryRunner.commitTransaction();
+
+      return this.quizQuestionRepo.findOne({
+        where: { id: bridgeId },
+        relations: ['question'],
+      });
+    } catch (err) {
+      await queryRunner.rollbackTransaction();
+      throw err;
+    } finally {
+      await queryRunner.release();
+    }
   }
 
   async deleteQuizQuestion(userId: string, bridgeId: string) {
@@ -460,12 +281,21 @@ export class QuizzesService {
 
     const questionId = quizQuestion.question.questionId;
 
-    // Delete bridge
-    await this.quizQuestionRepo.delete(bridgeId);
+    const queryRunner = this.dataSource.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
 
-    // Delete base question to prevent orphaned records
-    await this.questionRepo.delete(questionId);
+    try {
+      await queryRunner.manager.delete(QuizQuestion, bridgeId);
+      await queryRunner.manager.delete(Question, questionId);
 
-    return { message: 'Question deleted from quiz successfully' };
+      await queryRunner.commitTransaction();
+      return { message: 'Question deleted from quiz successfully' };
+    } catch (err) {
+      await queryRunner.rollbackTransaction();
+      throw err;
+    } finally {
+      await queryRunner.release();
+    }
   }
 }

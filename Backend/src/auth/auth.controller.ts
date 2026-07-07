@@ -4,6 +4,7 @@ import {
   Body,
   Controller,
   Get,
+  Patch,
   Post,
   Req,
   Res,
@@ -79,5 +80,16 @@ export class AuthController {
   @Get('/me')
   me(@Res({ passthrough: true }) res: Response) {
     return { message: 'You are logged In' };
+  }
+
+  @UseGuards(jwtAuthGuard)
+  @Patch('/role')
+  updateRole(
+    @Body('role') role: UserRole,
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const userId = (req.user as any).userId;
+    return this.authService.updateRole(userId, role, res);
   }
 }

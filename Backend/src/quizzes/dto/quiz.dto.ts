@@ -1,35 +1,12 @@
-import { IsString, IsNotEmpty, IsOptional, IsArray, ValidateNested, IsEnum, IsInt } from 'class-validator';
+import { IsString, IsNotEmpty, IsOptional, IsArray, ValidateNested, IsEnum } from 'class-validator';
 import { Type } from 'class-transformer';
 import { QuizStatus, QuizVisibility } from '../entities/quiz.entity/quiz.entity';
-import { QuestionType } from '../entities/question.entity/question.entity';
-
-export class CreateQuizQuestionDto {
-  @IsString()
-  @IsNotEmpty()
-  title: string;
-
-  @IsEnum(QuestionType)
-  type: QuestionType;
-
-  @IsOptional()
-  options: any;
-
-  @IsOptional()
-  correctAnswer: any;
-
-  @IsInt()
-  @IsOptional()
-  points?: number;
-
-  @IsInt()
-  @IsOptional()
-  displayOrder?: number;
-}
+import { CreateQuestionDto } from './question.dto';
 
 export class CreateQuizDto {
   @IsString()
   @IsNotEmpty()
-  title: string;
+  title!: string;
 
   @IsString()
   @IsOptional()
@@ -47,15 +24,16 @@ export class CreateQuizDto {
   @IsOptional()
   tags?: string[];
   
-  @IsString()
+  @IsArray()
+  @IsString({ each: true })
   @IsOptional()
-  bundleId?: string; // If provided, create quiz from bundle questions
+  bundleIds?: string[]; // If provided, create quiz from all these bundle questions
 
   @IsArray()
   @ValidateNested({ each: true })
-  @Type(() => CreateQuizQuestionDto)
+  @Type(() => CreateQuestionDto)
   @IsOptional()
-  questions?: CreateQuizQuestionDto[];
+  questions?: CreateQuestionDto[];
 }
 
 export class UpdateQuizDto {
@@ -78,28 +56,4 @@ export class UpdateQuizDto {
   @IsArray()
   @IsOptional()
   tags?: string[];
-}
-
-export class UpdateQuizQuestionDto {
-  @IsString()
-  @IsOptional()
-  title?: string;
-
-  @IsEnum(QuestionType)
-  @IsOptional()
-  type?: QuestionType;
-
-  @IsOptional()
-  options?: any;
-
-  @IsOptional()
-  correctAnswer?: any;
-
-  @IsInt()
-  @IsOptional()
-  points?: number;
-
-  @IsInt()
-  @IsOptional()
-  displayOrder?: number;
 }

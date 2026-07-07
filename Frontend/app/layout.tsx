@@ -25,8 +25,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Quizzer",
-  description: "All Quizes At Same Place",
+  title: "Quiz Forge",
+  description: "Schedule Quiz without any wory",
 };
 
 export default function RootLayout({
@@ -37,7 +37,7 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      suppressHydrationWarning // 👈 important
+      suppressHydrationWarning
       className={cn(
         "h-full",
         "antialiased",

@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useState, FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { isAxiosError } from "axios";
-import { api } from "@/lib/api";
+import api from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import {
@@ -21,6 +21,8 @@ import {
   FieldLabel,
 } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import { ErrorMessage } from "@/components/shared/error-message";
+import { Mail, Lock, User } from "lucide-react";
 
 export function SignupForm({
   className,
@@ -45,8 +47,19 @@ export function SignupForm({
     const formData = new FormData(e.currentTarget);
     const name = formData.get("name");
     const email = formData.get("email");
-    const password = formData.get("password");
+    const password = formData.get("password") as string;
     const role = formData.get("role");
+
+    // Client-side password strength check
+    const strongRegex =
+      /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?]).{8,}$/;
+    if (!strongRegex.test(password)) {
+      setError(
+        "Password must be at least 8 characters with 1 uppercase, 1 lowercase, 1 number, and 1 symbol",
+      );
+      setLoading(false);
+      return;
+    }
 
     try {
       await api.post("/auth/register", {
@@ -56,7 +69,8 @@ export function SignupForm({
         role,
       });
 
-      router.push("/dashboard");
+      // Backend does NOT auto-login on register, redirect to login
+      router.push("/login");
     } catch (err: unknown) {
       if (isAxiosError(err)) {
         setError(err.response?.data?.message || "Signup failed");
@@ -70,10 +84,19 @@ export function SignupForm({
 
   return (
     <div className={cn("flex flex-col gap-6", className)} {...props}>
-      <Card>
-        <CardHeader>
-          <CardTitle>Sign Up</CardTitle>
-          <CardDescription>Create a new account</CardDescription>
+      <Card className="shadow-xl border-border/50">
+        <CardHeader className="text-center pb-2">
+          <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-xl bg-primary">
+            <span className="text-lg font-bold text-primary-foreground">
+              QF
+            </span>
+          </div>
+          <CardTitle className="text-2xl font-heading">
+            Create your account
+          </CardTitle>
+          <CardDescription>
+            Join Quiz Forge and start creating quizzes
+          </CardDescription>
         </CardHeader>
 
         <CardContent>
@@ -81,34 +104,42 @@ export function SignupForm({
             <FieldGroup>
               <Field>
                 <FieldLabel htmlFor="name">Name</FieldLabel>
-                <Input
-                  id="name"
-                  name="name"
-                  type="text"
-                  placeholder="John Doe"
-                  required
-                />
+                <div className="relative">
+                  <User className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    id="name"
+                    name="name"
+                    type="text"
+                    placeholder="John Doe"
+                    required
+                    className="pl-10"
+                  />
+                </div>
               </Field>
 
               <Field>
                 <FieldLabel htmlFor="email">Email</FieldLabel>
-                <Input
-                  id="email"
-                  name="email"
-                  type="email"
-                  placeholder="m@example.com"
-                  required
-                />
+                <div className="relative">
+                  <Mail className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    id="email"
+                    name="email"
+                    type="email"
+                    placeholder="you@example.com"
+                    required
+                    className="pl-10"
+                  />
+                </div>
               </Field>
 
               <Field>
-                <FieldLabel htmlFor="role">Role</FieldLabel>
+                <FieldLabel htmlFor="role">I am a</FieldLabel>
                 <select
                   id="role"
                   name="role"
-                  className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+                  className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
                   required
-                  defaultValue="user"
+                  defaultValue="student"
                 >
                   <option
                     value="teacher"
@@ -126,20 +157,23 @@ export function SignupForm({
               </Field>
 
               <Field>
-                <div className="flex items-center">
-                  <FieldLabel htmlFor="password">Password</FieldLabel>
+                <FieldLabel htmlFor="password">Password</FieldLabel>
+                <div className="relative">
+                  <Lock className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    id="password"
+                    name="password"
+                    type="password"
+                    required
+                    className="pl-10"
+                  />
                 </div>
-                <Input
-                  id="password"
-                  name="password"
-                  type="password"
-                  required
-                />
+                <p className="text-xs text-muted-foreground mt-1">
+                  Min 8 chars, 1 uppercase, 1 lowercase, 1 number, 1 symbol
+                </p>
               </Field>
 
-              {error && (
-                <p className="text-sm text-red-500">{error}</p>
-              )}
+              {error && <ErrorMessage message={error} />}
 
               <Field>
                 <Button
@@ -147,25 +181,37 @@ export function SignupForm({
                   className="w-full"
                   disabled={loading}
                 >
-                  {loading ? "Signing up..." : "Sign Up"}
+                  {loading ? "Creating account..." : "Create Account"}
                 </Button>
+
+                <div className="relative my-3">
+                  <div className="absolute inset-0 flex items-center">
+                    <span className="w-full border-t border-border" />
+                  </div>
+                  <div className="relative flex justify-center text-xs uppercase">
+                    <span className="bg-card px-2 text-muted-foreground">
+                      or continue with
+                    </span>
+                  </div>
+                </div>
 
                 <Button
                   variant="outline"
                   type="button"
-                  className="w-full mt-2"
+                  className="w-full"
                   onClick={handleGoogleLogin}
                   disabled={googleLoading}
                 >
-                  {googleLoading
-                    ? "Redirecting..."
-                    : "Sign up with Google"}
+                  {googleLoading ? "Redirecting..." : "Google"}
                 </Button>
 
-                <FieldDescription className="text-center mt-2">
+                <FieldDescription className="text-center mt-4">
                   Already have an account?{" "}
-                  <Link href="/login" className="underline">
-                    Login
+                  <Link
+                    href="/login"
+                    className="font-medium text-primary underline underline-offset-4 hover:text-primary/80"
+                  >
+                    Sign in
                   </Link>
                 </FieldDescription>
               </Field>

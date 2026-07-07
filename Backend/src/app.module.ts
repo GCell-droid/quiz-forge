@@ -1,7 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ScheduleModule } from '@nestjs/schedule';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { ConfigModule } from '@nestjs/config';
+import { ConfigModule, ConfigService } from '@nestjs/config';
 import { AuthModule } from './auth/auth.module';
 import { GeminiModule } from './gemini/gemini.module';
 import { ThrottlerModule } from '@nestjs/throttler';
@@ -10,6 +10,8 @@ import { SessionsModule } from './sessions/sessions.module';
 import { ResponsesModule } from './responses/responses.module';
 import { AnalyticsModule } from './analytics/analytics.module';
 import { UsersModule } from './user/user.module';
+import { RedisModule } from './redis/redis.module';
+import { BullModule } from '@nestjs/bullmq';
 
 @Module({
   imports: [
@@ -29,9 +31,28 @@ import { UsersModule } from './user/user.module';
       },
       autoLoadEntities: true,
       synchronize: true,
-      // dropSchema: true,
     }),
     ScheduleModule.forRoot(),
+    BullModule.forRootAsync({
+      imports: [ConfigModule],
+      useFactory: async (configService: ConfigService) => {
+        const redisUrlString =
+          configService.get<string>('BULLMQ_REDIS_URL') ||
+          configService.get<string>('REDIS_URL') ||
+          'redis://localhost:6379';
+        const parsedUrl = new URL(redisUrlString);
+        return {
+          connection: {
+            host: parsedUrl.hostname,
+            port: parseInt(parsedUrl.port, 10) || 6379,
+            password: parsedUrl.password
+              ? decodeURIComponent(parsedUrl.password)
+              : undefined,
+          },
+        };
+      },
+      inject: [ConfigService],
+    }),
     AuthModule,
     GeminiModule,
     QuizzesModule,
@@ -39,6 +60,7 @@ import { UsersModule } from './user/user.module';
     ResponsesModule,
     AnalyticsModule,
     UsersModule,
+    RedisModule,
   ],
 })
 export class AppModule {}

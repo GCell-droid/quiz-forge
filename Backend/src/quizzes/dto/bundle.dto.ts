@@ -1,35 +1,12 @@
-import { IsString, IsNotEmpty, IsOptional, IsEnum, IsArray, ValidateNested, IsInt, ArrayNotEmpty, ArrayMaxSize } from 'class-validator';
+import { IsString, IsNotEmpty, IsOptional, IsEnum, IsArray, ValidateNested, ArrayNotEmpty, ArrayMaxSize } from 'class-validator';
 import { Type } from 'class-transformer';
-import { QuestionType } from '../entities/question.entity/question.entity';
 import { BundleVisibility } from '../entities/question-bundle.entity/question-bundle.entity';
-
-export class CreateBundleQuestionDto {
-  @IsString()
-  @IsNotEmpty()
-  title: string;
-
-  @IsEnum(QuestionType)
-  type: QuestionType;
-
-  @IsOptional()
-  options: any;
-
-  @IsOptional()
-  correctAnswer: any;
-
-  @IsInt()
-  @IsOptional()
-  points?: number;
-
-  @IsInt()
-  @IsOptional()
-  displayOrder?: number;
-}
+import { CreateQuestionDto } from './question.dto';
 
 export class CreateQuestionBundleDto {
   @IsString()
   @IsNotEmpty()
-  title: string;
+  title!: string;
 
   @IsString()
   @IsOptional()
@@ -43,13 +20,13 @@ export class CreateQuestionBundleDto {
   @IsString({ each: true })
   @ArrayNotEmpty()
   @ArrayMaxSize(5, { message: 'A bundle can have a maximum of 5 tags' })
-  tags: string[];
+  tags!: string[];
 
   @IsArray()
   @ValidateNested({ each: true })
-  @Type(() => CreateBundleQuestionDto)
+  @Type(() => CreateQuestionDto)
   @IsOptional()
-  questions?: CreateBundleQuestionDto[];
+  questions?: CreateQuestionDto[];
 }
 
 export class UpdateQuestionBundleDto {
@@ -70,28 +47,4 @@ export class UpdateQuestionBundleDto {
   @IsOptional()
   @ArrayMaxSize(5, { message: 'A bundle can have a maximum of 5 tags' })
   tags?: string[];
-}
-
-export class UpdateBundleQuestionDto {
-  @IsString()
-  @IsOptional()
-  title?: string;
-
-  @IsEnum(QuestionType)
-  @IsOptional()
-  type?: QuestionType;
-
-  @IsOptional()
-  options?: any;
-
-  @IsOptional()
-  correctAnswer?: any;
-
-  @IsInt()
-  @IsOptional()
-  points?: number;
-
-  @IsInt()
-  @IsOptional()
-  displayOrder?: number;
 }

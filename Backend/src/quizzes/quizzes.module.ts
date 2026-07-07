@@ -7,11 +7,20 @@ import { Question } from './entities/question.entity/question.entity';
 import { QuestionBundle } from './entities/question-bundle.entity/question-bundle.entity';
 import { BundleQuestion } from './entities/bundle-question.entity/bundle-question.entity';
 import { QuizQuestion } from './entities/quiz-question.entity/quiz-question.entity';
+import { BundlesService } from './bundles.service';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Quiz, Question, QuestionBundle, BundleQuestion, QuizQuestion])],
-  providers: [QuizzesService],
+  imports: [
+    TypeOrmModule.forFeature([
+      Quiz,
+      Question,
+      QuizQuestion,
+      QuestionBundle,
+      BundleQuestion,
+    ]),
+  ],
   controllers: [QuizzesController],
-  exports: [QuizzesService],
+  providers: [QuizzesService, BundlesService],
+  exports: [QuizzesService, BundlesService],
 })
 export class QuizzesModule {}

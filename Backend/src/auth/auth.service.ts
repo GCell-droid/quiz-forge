@@ -105,6 +105,26 @@ export class AuthService {
     }
   }
 
+  async updateRole(userId: string, role: UserRole, res: Response) {
+    const user = await this.userRepository.findOne({
+      where: { uid: userId as any },
+    });
+
+    if (!user) {
+      throw new UnauthorizedException('User not found');
+    }
+
+    user.role = role;
+    const savedUser = await this.userRepository.save(user);
+
+    // Generate new tokens with the updated role and set cookies
+    const tokens = this.generateToken(savedUser);
+    this.setAuthCookies(tokens, res);
+
+    const { passwordHash, ...result } = savedUser;
+    return { user: result, message: 'Role updated successfully' };
+  }
+
   async verifyPassword(password: string, dbpassword: string): Promise<boolean> {
     return await bcrypt.compare(password, dbpassword);
   }
@@ -125,7 +145,7 @@ export class AuthService {
     const jwtSecret = this.configService.get<string>('JWT_SECRET');
     return this.jwtService.sign(payload, {
       secret: jwtSecret,
-      expiresIn: '15m',
+      expiresIn: '240m',
     });
   }
 
@@ -219,7 +239,7 @@ export class AuthService {
   ) {
     res.cookie('jwt', tokens.accessToken, {
       httpOnly: true,
-      secure: false,
+      secure: true,
       sameSite: 'lax',
       maxAge: 15 * 60 * 1000,
       signed: true,
@@ -227,7 +247,7 @@ export class AuthService {
 
     res.cookie('refresh_token', tokens.refreshToken, {
       httpOnly: true,
-      secure: false,
+      secure: true,
       sameSite: 'lax',
       maxAge: 7 * 24 * 60 * 60 * 1000,
       signed: true,
@@ -237,13 +257,13 @@ export class AuthService {
   public logout(res: Response) {
     res.clearCookie('jwt', {
       httpOnly: true,
-      secure: false,
+      secure: true,
       sameSite: 'lax',
     });
 
     res.clearCookie('refresh_token', {
       httpOnly: true,
-      secure: false,
+      secure: true,
       sameSite: 'lax',
     });
   }

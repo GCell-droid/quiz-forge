@@ -10,8 +10,21 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
-# Personal notes
-notes.md
+# Personal notes & Architecture Documentation
+README.md
+Backend/learned.md
+Backend/notes.md
+Backend/quizz.md
+Backend/README.md
+Backend/src/quizzes/README.md
+Frontend/frontend.md
+Frontend/progress.md
+Frontend/README.md
+implementation/REDIS_ARCHITECTURE.md
+notes/
+architecture/
+implementation/
+docs/
 
 # =========================
 # BACKEND (NestJS)
@@ -57,6 +70,7 @@ Frontend/.env*
 # vercel
 Frontend/.vercel
 
+Redis_Server/.config
 # typescript
 Frontend/*.tsbuildinfo
 Frontend/next-env.d.ts

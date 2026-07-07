@@ -10,20 +10,23 @@ import {
   Req,
 } from '@nestjs/common';
 import { QuizzesService } from './quizzes.service';
+import { BundlesService } from './bundles.service';
 import {
   CreateQuestionBundleDto,
   UpdateQuestionBundleDto,
-  CreateBundleQuestionDto,
-  UpdateBundleQuestionDto,
 } from './dto/bundle.dto';
-import { CreateQuizDto, UpdateQuizDto, CreateQuizQuestionDto, UpdateQuizQuestionDto } from './dto/quiz.dto';
+import { CreateQuizDto, UpdateQuizDto } from './dto/quiz.dto';
+import { CreateQuestionDto, UpdateQuestionDto } from './dto/question.dto';
 import { jwtAuthGuard } from '../auth/guards/jwtguard/jwt-auth.guard';
 import { CurrentUser } from '../auth/decorators/currentUser.decorator';
 
 @Controller('quizzes')
 @UseGuards(jwtAuthGuard)
 export class QuizzesController {
-  constructor(private readonly quizzesService: QuizzesService) {}
+  constructor(
+    private readonly quizzesService: QuizzesService,
+    private readonly bundlesService: BundlesService,
+  ) {}
 
   // --- QUESTION BUNDLE ENDPOINTS ---
 
@@ -32,7 +35,7 @@ export class QuizzesController {
     @CurrentUser() user: any,
     @Body() data: CreateQuestionBundleDto,
   ) {
-    return this.quizzesService.createBundle(user.userId, data);
+    return this.bundlesService.createBundle(user.userId, data);
   }
 
   @Get('bundles')
@@ -45,7 +48,7 @@ export class QuizzesController {
 
     const isPublicSearch = req.query.public === 'true';
 
-    return this.quizzesService.getAllBundles(
+    return this.bundlesService.getAllBundles(
       isPublicSearch ? undefined : user.userId,
       tags,
     );
@@ -53,7 +56,7 @@ export class QuizzesController {
 
   @Get('bundles/:bundleId')
   getBundle(@Param('bundleId') bundleId: string) {
-    return this.quizzesService.getBundle(bundleId);
+    return this.bundlesService.getBundle(bundleId);
   }
 
   @Patch('bundles/:bundleId')
@@ -62,35 +65,35 @@ export class QuizzesController {
     @Param('bundleId') bundleId: string,
     @Body() data: UpdateQuestionBundleDto,
   ) {
-    return this.quizzesService.updateBundle(user.userId, bundleId, data);
+    return this.bundlesService.updateBundle(user.userId, bundleId, data);
   }
 
   @Delete('bundles/:bundleId')
   deleteBundle(@CurrentUser() user: any, @Param('bundleId') bundleId: string) {
-    return this.quizzesService.deleteBundle(user.userId, bundleId);
+    return this.bundlesService.deleteBundle(user.userId, bundleId);
   }
 
   @Post('bundles/:bundleId/questions')
   addQuestionToBundle(
     @CurrentUser() user: any,
     @Param('bundleId') bundleId: string,
-    @Body() data: CreateBundleQuestionDto,
+    @Body() data: CreateQuestionDto,
   ) {
-    return this.quizzesService.addQuestionToBundle(user.userId, bundleId, data);
+    return this.bundlesService.addQuestionToBundle(user.userId, bundleId, data);
   }
 
   @Patch('bundles/questions/:questionId')
   updateBundleQuestion(
     @CurrentUser() user: any,
     @Param('questionId') questionId: string,
-    @Body() data: UpdateBundleQuestionDto,
+    @Body() data: UpdateQuestionDto,
   ) {
-    return this.quizzesService.updateBundleQuestion(user.userId, questionId, data);
+    return this.bundlesService.updateBundleQuestion(user.userId, questionId, data);
   }
 
   @Delete('bundles/questions/:questionId')
   deleteBundleQuestion(@CurrentUser() user: any, @Param('questionId') questionId: string) {
-    return this.quizzesService.deleteBundleQuestion(user.userId, questionId);
+    return this.bundlesService.deleteBundleQuestion(user.userId, questionId);
   }
 
   // --- QUIZ ENDPOINTS ---
@@ -98,6 +101,14 @@ export class QuizzesController {
   @Post()
   createQuiz(@CurrentUser() user: any, @Body() data: CreateQuizDto) {
     return this.quizzesService.createQuiz(user.userId, data);
+  }
+
+  @Get()
+  getAllQuizzes(@CurrentUser() user: any, @Req() req: any) {
+    const isPublicSearch = req.query.public === 'true';
+    return this.quizzesService.getAllQuizzes(
+      isPublicSearch ? undefined : user.userId,
+    );
   }
 
   @Get(':quizId')
@@ -123,7 +134,7 @@ export class QuizzesController {
   addQuestionToQuiz(
     @CurrentUser() user: any,
     @Param('quizId') quizId: string,
-    @Body() data: CreateQuizQuestionDto,
+    @Body() data: CreateQuestionDto,
   ) {
     return this.quizzesService.addQuestionToQuiz(user.userId, quizId, data);
   }
@@ -132,7 +143,7 @@ export class QuizzesController {
   updateQuizQuestion(
     @CurrentUser() user: any,
     @Param('bridgeId') bridgeId: string,
-    @Body() data: UpdateQuizQuestionDto,
+    @Body() data: UpdateQuestionDto,
   ) {
     return this.quizzesService.updateQuizQuestion(user.userId, bridgeId, data);
   }

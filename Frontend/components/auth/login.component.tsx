@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useState, FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { isAxiosError } from "axios";
-import { api } from "@/lib/api";
+import api from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import {
@@ -21,6 +21,8 @@ import {
   FieldLabel,
 } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import { ErrorMessage } from "@/components/shared/error-message";
+import { Mail, Lock } from "lucide-react";
 
 export function LoginForm({
   className,
@@ -37,7 +39,7 @@ export function LoginForm({
     window.location.href = `${process.env.NEXT_PUBLIC_BACKEND_URL}/auth/google`;
   };
 
-  async function handleSubmit(e: HTMLFormElement) {
+  async function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setError("");
     setLoading(true);
@@ -52,7 +54,7 @@ export function LoginForm({
         password,
       });
 
-      router.push("/dashboard");
+      window.location.href = "/dashboard";
     } catch (err: unknown) {
       if (isAxiosError(err)) {
         setError(err.response?.data?.message || "Login failed");
@@ -66,10 +68,17 @@ export function LoginForm({
 
   return (
     <div className={cn("flex flex-col gap-6", className)} {...props}>
-      <Card>
-        <CardHeader>
-          <CardTitle>Login</CardTitle>
-          <CardDescription>Enter your email</CardDescription>
+      <Card className="shadow-xl border-border/50">
+        <CardHeader className="text-center pb-2">
+          <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-xl bg-primary">
+            <span className="text-lg font-bold text-primary-foreground">
+              QF
+            </span>
+          </div>
+          <CardTitle className="text-2xl font-heading">Welcome back</CardTitle>
+          <CardDescription>
+            Sign in to your Quiz Forge account
+          </CardDescription>
         </CardHeader>
 
         <CardContent>
@@ -77,31 +86,36 @@ export function LoginForm({
             <FieldGroup>
               <Field>
                 <FieldLabel htmlFor="email">Email</FieldLabel>
-                <Input
-                  id="email"
-                  name="email"
-                  type="email"
-                  placeholder="m@example.com"
-                  required
-                />
+                <div className="relative">
+                  <Mail className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    id="email"
+                    name="email"
+                    type="email"
+                    placeholder="you@example.com"
+                    required
+                    className="pl-10"
+                  />
+                </div>
               </Field>
 
               <Field>
                 <div className="flex items-center">
                   <FieldLabel htmlFor="password">Password</FieldLabel>
                 </div>
-
-                <Input
-                  id="password"
-                  name="password"
-                  type="password"
-                  required
-                />
+                <div className="relative">
+                  <Lock className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    id="password"
+                    name="password"
+                    type="password"
+                    required
+                    className="pl-10"
+                  />
+                </div>
               </Field>
 
-              {error && (
-                <p className="text-sm text-red-500">{error}</p>
-              )}
+              {error && <ErrorMessage message={error} />}
 
               <Field>
                 <Button
@@ -109,24 +123,36 @@ export function LoginForm({
                   className="w-full"
                   disabled={loading}
                 >
-                  {loading ? "Logging in..." : "Login"}
+                  {loading ? "Signing in..." : "Sign In"}
                 </Button>
+
+                <div className="relative my-3">
+                  <div className="absolute inset-0 flex items-center">
+                    <span className="w-full border-t border-border" />
+                  </div>
+                  <div className="relative flex justify-center text-xs uppercase">
+                    <span className="bg-card px-2 text-muted-foreground">
+                      or continue with
+                    </span>
+                  </div>
+                </div>
 
                 <Button
                   variant="outline"
                   type="button"
-                  className="w-full mt-2"
+                  className="w-full"
                   onClick={handleGoogleLogin}
                   disabled={googleLoading}
                 >
-                  {googleLoading
-                    ? "Redirecting..."
-                    : "Login with Google"}
+                  {googleLoading ? "Redirecting..." : "Google"}
                 </Button>
 
-                <FieldDescription className="text-center mt-2">
+                <FieldDescription className="text-center mt-4">
                   Don&apos;t have an account?{" "}
-                  <Link href="/signup" className="underline">
+                  <Link
+                    href="/signup"
+                    className="font-medium text-primary underline underline-offset-4 hover:text-primary/80"
+                  >
                     Sign up
                   </Link>
                 </FieldDescription>

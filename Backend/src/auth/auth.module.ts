@@ -12,6 +12,8 @@ import { JwtStrategy } from './strategy/jwt-strategy';
 import { RoleGuard } from './guards/roles-guard/roles.guard';
 import { jwtAuthGuard } from './guards/jwtguard/jwt-auth.guard';
 
+import { WsJwtGuard } from './guards/ws-jwt/ws-jwt.guard';
+
 @Module({
   imports: [
     ConfigModule.forFeature(googleOauthConfig),
@@ -26,7 +28,8 @@ import { jwtAuthGuard } from './guards/jwtguard/jwt-auth.guard';
     JwtStrategy,
     RoleGuard,
     jwtAuthGuard,
+    WsJwtGuard,
   ],
-  exports: [AuthService, RoleGuard, jwtAuthGuard],
+  exports: [AuthService, RoleGuard, jwtAuthGuard, JwtModule, WsJwtGuard],
 })
 export class AuthModule {}
