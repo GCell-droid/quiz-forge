@@ -11,10 +11,10 @@ import { QuizzesModule } from '../quizzes/quizzes.module';
 import { QuizLifecycleProcessor } from './processors/quiz-lifecycle.processor';
 import { AnswerIngestionProcessor } from './processors/answer-ingestion.processor';
 import { Question } from '../quizzes/entities/question.entity/question.entity';
-import { QuestionResponse } from '../responses/entities/question-response.entity/question-response.entity';
 import User from '../common/entity/user.entity';
 
 import { AuthModule } from '../auth/auth.module';
+import { QuestionResponse } from './entities/question-response.entity/question-response.entity';
 
 @Module({
   imports: [

@@ -287,7 +287,7 @@ export class QuizzesService {
 
     try {
       await queryRunner.manager.delete(QuizQuestion, bridgeId);
-      await queryRunner.manager.delete(Question, questionId);
+      await queryRunner.manager.softDelete(Question, questionId);
 
       await queryRunner.commitTransaction();
       return { message: 'Question deleted from quiz successfully' };

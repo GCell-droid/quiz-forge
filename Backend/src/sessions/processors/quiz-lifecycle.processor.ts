@@ -67,13 +67,13 @@ export class QuizLifecycleProcessor extends WorkerHost {
       this.sessionGateway.broadcastToSession(sessionId, 'quiz_started', {
         sessionId,
         quizTitle: quiz.title,
-        questions: quiz.quizQuestions.map((qq: any) => ({
+        questions: quiz.quizQuestions?.map((qq: any) => ({
           questionId: qq.question.questionId,
           title: qq.question.title,
           type: qq.question.type,
           options: qq.question.options,
           points: qq.question.points,
-        })),
+        })) || [],
         timeLimit: session.timeLimit,
       });
 

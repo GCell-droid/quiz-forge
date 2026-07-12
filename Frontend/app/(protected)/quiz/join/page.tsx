@@ -43,15 +43,17 @@ export default function JoinQuizPage() {
       const diff = targetTime - now;
 
       if (diff <= 0) {
-        setCountdown("Starting soon...");
-        return;
+        setCountdown("Starting...");
+        // If the timer hits zero, redirect to the live page immediately.
+        // The live page will wait for the quiz_started event if it hasn't fired yet.
+        router.push(`/quiz/live/${joinInput}`);
+      } else {
+        const minutes = Math.floor(diff / (1000 * 60));
+        const seconds = Math.floor((diff % (1000 * 60)) / 1000);
+        setCountdown(
+          `${minutes.toString().padStart(2, "0")}:${seconds.toString().padStart(2, "0")}`,
+        );
       }
-
-      const minutes = Math.floor(diff / (1000 * 60));
-      const seconds = Math.floor((diff % (1000 * 60)) / 1000);
-      setCountdown(
-        `${minutes.toString().padStart(2, "0")}:${seconds.toString().padStart(2, "0")}`,
-      );
     };
 
     updateTimer();

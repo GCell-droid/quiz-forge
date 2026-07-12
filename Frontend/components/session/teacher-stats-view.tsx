@@ -1,10 +1,10 @@
 import { useState } from "react";
 import { QuizStartedPayload, LiveAnswerPayload } from "@/lib/types";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { ChevronLeft, ChevronRight, Users, Trophy } from "lucide-react";
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from "recharts";
+import { ChevronLeft, ChevronRight, Users, Trophy, BarChart3 } from "lucide-react";
+import { PieChart, Pie, Tooltip, ResponsiveContainer, Cell, Legend } from "recharts";
 
 interface TeacherStatsViewProps {
   quizData: QuizStartedPayload;
@@ -30,6 +30,8 @@ export function TeacherStatsView({ quizData, answers, participantCount, isLive =
     };
   }) || [];
 
+  const hasAnswers = chartData.some(data => data.count > 0);
+
   const handleNext = () => {
     if (currentQuestionIndex < quizData.questions.length - 1) {
       setCurrentQuestionIndex(prev => prev + 1);
@@ -54,109 +56,203 @@ export function TeacherStatsView({ quizData, answers, participantCount, isLive =
   const leaderboard = Array.from(userScores.values()).sort((a, b) => b.score - a.score);
 
   const COLORS = [
-    'hsl(var(--chart-1))',
-    'hsl(var(--chart-2))',
-    'hsl(var(--chart-3))',
-    'hsl(var(--chart-4))',
-    'hsl(var(--chart-5))'
+    '#3b82f6', // Vibrant Blue
+    '#ec4899', // Vibrant Pink
+    '#10b981', // Vibrant Emerald
+    '#f59e0b', // Vibrant Amber
+    '#8b5cf6', // Vibrant Violet
+    '#ef4444', // Vibrant Red
   ];
 
+  const RADIAN = Math.PI / 180;
+  const renderCustomizedLabel = ({ cx, cy, midAngle, innerRadius, outerRadius, percent, index }: any) => {
+    if (percent === 0) return null; // Don't show label if 0%
+    const radius = innerRadius + (outerRadius - innerRadius) * 0.5;
+    const x = cx + radius * Math.cos(-midAngle * RADIAN);
+    const y = cy + radius * Math.sin(-midAngle * RADIAN);
+  
+    return (
+      <text x={x} y={y} fill="white" textAnchor={x > cx ? 'start' : 'end'} dominantBaseline="central" className="text-xs font-bold drop-shadow-md">
+        {`${(percent * 100).toFixed(0)}%`}
+      </text>
+    );
+  };
+
+  const truncateText = (text: string, maxLength: number = 25) => {
+    if (!text) return "";
+    return text.length > maxLength ? text.substring(0, maxLength) + "..." : text;
+  };
+
   return (
-    <div className="mx-auto max-w-4xl px-4 py-8 sm:px-6 lg:px-8">
-      <div className="mb-6 flex items-center justify-between">
+    <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6 lg:px-8">
+      <div className="mb-8 flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight font-heading">
+          <h1 className="text-3xl font-bold tracking-tight font-heading bg-gradient-to-r from-primary to-primary/60 bg-clip-text text-transparent">
             {isLive ? 'Live Stats' : 'Session Stats'}: {quizData.quizTitle}
           </h1>
-          <div className="flex items-center gap-4 mt-1">
-            <p className="text-sm text-muted-foreground flex items-center gap-2">
-              <Users className="h-4 w-4" />
+          <div className="flex items-center gap-4 mt-2">
+            <Badge variant="secondary" className="flex items-center gap-1.5 px-3 py-1">
+              <Users className="h-3.5 w-3.5" />
               {isLive ? (
                 <>{participantCount} {participantCount === 1 ? 'participant' : 'participants'} online</>
               ) : (
                 <>{leaderboard.length} {leaderboard.length === 1 ? 'participant' : 'participants'}</>
               )}
-            </p>
+            </Badge>
             <span className="text-muted-foreground/30">•</span>
-            <p className="text-sm text-muted-foreground flex items-center gap-2">
+            <Badge variant="outline" className="flex items-center gap-1.5 px-3 py-1 bg-background/50 backdrop-blur-sm">
+              <BarChart3 className="h-3.5 w-3.5 text-muted-foreground" />
               {totalAnswers} responses for this question
-            </p>
+            </Badge>
           </div>
         </div>
-        <Badge variant="secondary" className="text-sm py-1 px-3">
-          Question {currentQuestionIndex + 1} of {quizData.questions.length}
-        </Badge>
+        <div className="flex items-center gap-3">
+          <Badge variant="default" className="text-sm py-1.5 px-4 shadow-sm">
+            Question {currentQuestionIndex + 1} of {quizData.questions.length}
+          </Badge>
+        </div>
       </div>
 
-      <Card className="border-border/50 shadow-md mb-6">
-        <CardHeader>
-          <div className="flex items-center justify-between mb-2">
-            <Badge variant="outline">{currentQuestion.type.replace("_", " ")}</Badge>
-          </div>
-          <CardTitle className="text-xl leading-relaxed">
-            {currentQuestion.title}
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="h-[400px] w-full mt-4">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={chartData} margin={{ top: 20, right: 30, left: 0, bottom: 5 }}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" />
-                <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fill: 'hsl(var(--muted-foreground))'}} />
-                <YAxis allowDecimals={false} axisLine={false} tickLine={false} tick={{fill: 'hsl(var(--muted-foreground))'}} />
-                <Tooltip 
-                  cursor={{fill: 'transparent'}}
-                  contentStyle={{ backgroundColor: 'hsl(var(--card))', borderColor: 'hsl(var(--border))', borderRadius: '8px' }}
-                  itemStyle={{ color: 'hsl(var(--foreground))' }}
-                  labelStyle={{ color: 'hsl(var(--foreground))' }}
-                />
-                <Bar dataKey="count" radius={[4, 4, 0, 0]}>
-                  {chartData.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                  ))}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card className="border-border/50 shadow-md mb-6">
-        <CardHeader>
-          <div className="flex items-center gap-2">
-            <Trophy className="h-5 w-5 text-chart-2" />
-            <CardTitle className="text-xl leading-relaxed">Global Leaderboard</CardTitle>
-          </div>
-        </CardHeader>
-        <CardContent>
-          {leaderboard.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No responses yet.</p>
-          ) : (
-            <div className="space-y-4 mt-2">
-              {leaderboard.map((user, index) => (
-                <div key={index} className="flex items-center justify-between rounded-lg border border-border/50 p-4 shadow-sm bg-card/50">
-                  <div className="flex items-center gap-4">
-                    <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 text-sm font-bold text-primary">
-                      {index + 1}
-                    </div>
-                    <span className="font-medium text-lg">{user.name}</span>
-                  </div>
-                  <Badge variant="secondary" className="px-3 py-1 text-base">
-                    {user.score} pts
-                  </Badge>
-                </div>
-              ))}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 mb-8">
+        <Card className="lg:col-span-7 border-border/50 shadow-lg bg-card/40 backdrop-blur-md flex flex-col overflow-hidden">
+          <div className="absolute inset-0 bg-gradient-to-br from-primary/5 to-transparent pointer-events-none" />
+          <CardHeader className="relative z-10 border-b border-border/10 pb-4">
+            <div className="flex items-center justify-between mb-3">
+              <Badge variant="outline" className="uppercase tracking-wider text-[10px] font-semibold bg-background/50">
+                {currentQuestion.type.replace("_", " ")}
+              </Badge>
             </div>
-          )}
-        </CardContent>
-      </Card>
+            <CardTitle className="text-2xl leading-relaxed font-semibold">
+              {currentQuestion.title}
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="relative z-10 flex-grow flex flex-col p-6">
+            {hasAnswers ? (
+              <div className="min-h-[420px] w-full flex items-center justify-center">
+                <ResponsiveContainer width="100%" height={420}>
+                  <PieChart>
+                    <Pie
+                      data={chartData}
+                      cx="50%"
+                      cy="45%"
+                      labelLine={false}
+                      label={renderCustomizedLabel}
+                      outerRadius={130}
+                      innerRadius={50}
+                      fill="#8884d8"
+                      dataKey="count"
+                      stroke="transparent"
+                      strokeWidth={2}
+                    >
+                      {chartData.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                      ))}
+                    </Pie>
+                    <Tooltip 
+                      contentStyle={{ 
+                        backgroundColor: 'hsl(var(--card))', 
+                        borderColor: 'hsl(var(--border))', 
+                        borderRadius: '12px',
+                        boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1)'
+                      }}
+                      itemStyle={{ color: 'hsl(var(--foreground))', fontWeight: 500 }}
+                      formatter={(value: any, name: any) => [`${value} ${value === 1 ? 'response' : 'responses'}`, name]}
+                    />
+                    <Legend 
+                      verticalAlign="bottom" 
+                      iconType="circle"
+                      wrapperStyle={{ paddingTop: '10px', paddingBottom: '10px' }}
+                      formatter={(value) => <span title={value} className="text-foreground text-sm font-medium">{truncateText(value, 25)}</span>}
+                    />
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
+            ) : (
+              <div className="flex-grow flex flex-col items-center justify-center text-muted-foreground min-h-[420px]">
+                <BarChart3 className="h-16 w-16 mb-4 opacity-20" />
+                <p className="text-lg font-medium">No responses yet</p>
+                <p className="text-sm opacity-70">Waiting for participants to answer...</p>
+              </div>
+            )}
+          </CardContent>
+        </Card>
 
-      <div className="flex justify-between items-center">
-        <Button variant="outline" onClick={handlePrev} disabled={currentQuestionIndex === 0}>
-          <ChevronLeft className="mr-2 h-4 w-4" /> Previous Question
+        <Card className="lg:col-span-5 border-border/50 shadow-lg bg-card/40 backdrop-blur-md flex flex-col lg:h-[550px]">
+          <CardHeader className="border-b border-border/10 pb-4 shrink-0">
+            <div className="flex items-center gap-2">
+              <div className="p-2 rounded-full bg-chart-2/10">
+                <Trophy className="h-5 w-5 text-chart-2" />
+              </div>
+              <div>
+                <CardTitle className="text-xl">Global Leaderboard</CardTitle>
+                <CardDescription>Top performers across all questions</CardDescription>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent className="flex-grow overflow-auto p-0">
+            {leaderboard.length === 0 ? (
+              <div className="flex flex-col items-center justify-center h-full text-muted-foreground p-6 min-h-[300px]">
+                <Users className="h-12 w-12 mb-3 opacity-20" />
+                <p>No participants on the board yet.</p>
+              </div>
+            ) : (
+              <div className="flex flex-col">
+                {leaderboard.map((user, index) => (
+                  <div 
+                    key={index} 
+                    className="flex items-center justify-between p-4 border-b border-border/50 last:border-0 hover:bg-muted/30 transition-colors"
+                  >
+                    <div className="flex items-center gap-4">
+                      <div className={`flex h-10 w-10 items-center justify-center rounded-full font-bold shadow-sm ${
+                        index === 0 ? 'bg-yellow-500/20 text-yellow-600 dark:text-yellow-500' :
+                        index === 1 ? 'bg-slate-300/30 text-slate-600 dark:text-slate-300' :
+                        index === 2 ? 'bg-amber-700/20 text-amber-700 dark:text-amber-500' :
+                        'bg-primary/10 text-primary'
+                      }`}>
+                        {index + 1}
+                      </div>
+                      <span className="font-medium text-base truncate max-w-[150px]">{user.name}</span>
+                    </div>
+                    <Badge variant={index < 3 ? "default" : "secondary"} className={`px-3 py-1 text-sm font-semibold ${
+                      index === 0 ? 'bg-yellow-500 hover:bg-yellow-600 text-white border-transparent' : ''
+                    }`}>
+                      {user.score} pts
+                    </Badge>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className="flex justify-between items-center bg-card border border-border/50 p-4 rounded-xl shadow-sm">
+        <Button 
+          variant="outline" 
+          onClick={handlePrev} 
+          disabled={currentQuestionIndex === 0}
+          className="gap-2 px-6"
+        >
+          <ChevronLeft className="h-4 w-4" /> Previous
         </Button>
-        <Button variant="outline" onClick={handleNext} disabled={currentQuestionIndex === quizData.questions.length - 1}>
-          Next Question <ChevronRight className="ml-2 h-4 w-4" />
+        
+        <div className="flex gap-1.5 hidden sm:flex">
+          {quizData.questions.map((_, idx) => (
+            <div 
+              key={idx} 
+              className={`h-2 rounded-full transition-all ${
+                idx === currentQuestionIndex ? 'w-6 bg-primary' : 'w-2 bg-primary/20'
+              }`} 
+            />
+          ))}
+        </div>
+
+        <Button 
+          onClick={handleNext} 
+          disabled={currentQuestionIndex === quizData.questions.length - 1}
+          className="gap-2 px-6 shadow-md hover:shadow-lg transition-all"
+        >
+          Next <ChevronRight className="h-4 w-4" />
         </Button>
       </div>
     </div>

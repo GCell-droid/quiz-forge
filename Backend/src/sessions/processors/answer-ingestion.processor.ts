@@ -3,12 +3,14 @@ import { Job } from 'bullmq';
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { QuestionResponse } from '../../responses/entities/question-response.entity/question-response.entity';
 import { QuizSession } from '../entities/quiz-session.entity/quiz-session.entity';
 import { Question } from '../../quizzes/entities/question.entity/question.entity';
 import User from '../../common/entity/user.entity';
 import { RedisService } from '../../redis/redis.service';
 import { QuizzesService } from '../../quizzes/quizzes.service';
+import { QuestionResponse } from '../entities/question-response.entity/question-response.entity';
+
+import { SessionGateway } from '../events/session/session.gateway';
 
 interface AnswerPayload {
   sessionId: string;
@@ -28,8 +30,11 @@ export class AnswerIngestionProcessor extends WorkerHost {
     private readonly sessionRepo: Repository<QuizSession>,
     @InjectRepository(Question)
     private readonly questionRepo: Repository<Question>,
+    @InjectRepository(User)
+    private readonly userRepo: Repository<User>,
     private readonly redisService: RedisService,
     private readonly quizzesService: QuizzesService,
+    private readonly sessionGateway: SessionGateway,
   ) {
     super();
   }
@@ -41,7 +46,7 @@ export class AnswerIngestionProcessor extends WorkerHost {
     // Try to get from Redis pre-warmed cache first.
     const cacheKey = `quiz:session:${sessionId}:metadata`;
     const cachedQuizData = await this.redisService.get(cacheKey);
-    
+
     let quiz: any;
     if (cachedQuizData) {
       quiz = JSON.parse(cachedQuizData);
@@ -63,7 +68,9 @@ export class AnswerIngestionProcessor extends WorkerHost {
     );
 
     if (!quizQuestionBridge) {
-      throw new NotFoundException(`Question ${questionId} not found in this session's quiz`);
+      throw new NotFoundException(
+        `Question ${questionId} not found in this session's quiz`,
+      );
     }
 
     const question = quizQuestionBridge.question;
@@ -84,16 +91,35 @@ export class AnswerIngestionProcessor extends WorkerHost {
     });
 
     await this.responseRepo.save(questionResponse);
-    console.log(`[Answer Ingestion] Saved answer for user: ${userId}, question: ${questionId}, correct: ${isCorrect}`);
+    console.log(
+      `[Answer Ingestion] Saved answer for user: ${userId}, question: ${questionId}, correct: ${isCorrect}`,
+    );
+
+    // 4. Fetch User to broadcast userName
+    const user = await this.userRepo.findOne({ where: { uid: userId } });
+    const userName = user?.name || (user?.email ? user.email.split('@')[0] : 'Unknown');
+
+    // 5. Broadcast live_answer_submitted event to the room
+    this.sessionGateway.broadcastToSession(sessionId, 'live_answer_submitted', {
+      questionId,
+      userId,
+      userName,
+      response,
+      timeTakenSecs,
+      isCorrect,
+      pointsScored,
+    });
   }
 
   private evaluateAnswer(question: any, response: string): boolean {
     const correctAnswer = question.correctAnswer;
-    
+
     if (typeof correctAnswer === 'string') {
-      return correctAnswer.trim().toLowerCase() === response.trim().toLowerCase();
+      return (
+        correctAnswer.trim().toLowerCase() === response.trim().toLowerCase()
+      );
     }
-    
+
     if (typeof correctAnswer === 'number') {
       return correctAnswer === Number(response);
     }

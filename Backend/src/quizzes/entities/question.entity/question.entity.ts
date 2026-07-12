@@ -1,4 +1,4 @@
-import { Entity, PrimaryGeneratedColumn, Column, OneToMany } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, OneToMany, DeleteDateColumn } from 'typeorm';
 import { QuizQuestion } from '../quiz-question.entity/quiz-question.entity';
 import { BundleQuestion } from '../bundle-question.entity/bundle-question.entity';
 
@@ -33,4 +33,7 @@ export class Question {
 
   @OneToMany(() => BundleQuestion, (bq) => bq.question)
   bundleQuestions!: BundleQuestion[];
+
+  @DeleteDateColumn()
+  deletedAt!: Date;
 }

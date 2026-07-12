@@ -43,7 +43,8 @@ export default function ScheduleSessionPage() {
   const [loadingQuizzes, setLoadingQuizzes] = useState(true);
 
   useEffect(() => {
-    api.get("/quizzes")
+    api
+      .get("/quizzes")
       .then((res) => {
         setQuizzes(res.data);
         if (res.data.length > 0 && !prefilledQuizId) {
@@ -84,7 +85,9 @@ export default function ScheduleSessionPage() {
       setSession(res.data);
     } catch (err) {
       if (isAxiosError(err)) {
-        setError(err.response?.data?.message || "Failed to schedule session");
+        setError(
+          err.response?.data?.message || "Failed to schedule session",
+        );
       }
     } finally {
       setLoading(false);
@@ -143,22 +146,36 @@ export default function ScheduleSessionPage() {
               </Button>
             </div>
 
-            <div className="space-y-2 text-sm text-muted-foreground">
-              <p>
+            <div className="pt-2">
+              <Link href={`/quiz/live/${session.joinCode}`}>
+                <Button className="w-full shadow-md font-semibold">
+                  Join Session
+                </Button>
+              </Link>
+            </div>
+
+            <div className="space-y-2 text-sm text-muted-foreground bg-muted/20 p-4 rounded-xl text-left border border-border/50">
+              <p className="flex justify-between">
                 <strong className="text-foreground">Starts at:</strong>{" "}
-                {new Date(session.scheduledStart).toLocaleString()}
+                <span>
+                  {new Date(session.scheduledStart).toLocaleString()}
+                </span>
               </p>
-              <p>
-                <strong className="text-foreground">Time limit:</strong>{" "}
-                {Math.floor(session.timeLimit / 60)} minutes
+              <p className="flex justify-between">
+                <strong className="text-foreground">
+                  Time limit:
+                </strong>{" "}
+                <span>
+                  {Math.floor(session.timeLimit / 60)} minutes
+                </span>
               </p>
-              <p>
+              <p className="flex justify-between">
                 <strong className="text-foreground">Status:</strong>{" "}
-                {session.status}
+                <span className="capitalize">{session.status}</span>
               </p>
             </div>
 
-            <Link href="/dashboard">
+            <Link href="/dashboard" className="block mt-2">
               <Button variant="outline" className="w-full">
                 Back to Dashboard
               </Button>
@@ -199,7 +216,9 @@ export default function ScheduleSessionPage() {
                   Choose the quiz you want to schedule a session for
                 </FieldDescription>
                 {loadingQuizzes ? (
-                  <div className="flex h-10 items-center text-sm text-muted-foreground">Loading your quizzes...</div>
+                  <div className="flex h-10 items-center text-sm text-muted-foreground">
+                    Loading your quizzes...
+                  </div>
                 ) : quizzes.length > 0 ? (
                   <select
                     className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
@@ -207,16 +226,29 @@ export default function ScheduleSessionPage() {
                     onChange={(e) => setQuizId(e.target.value)}
                     required
                   >
-                    <option value="" disabled>Select a quiz...</option>
+                    <option value="" disabled>
+                      Select a quiz...
+                    </option>
                     {quizzes.map((q: any) => (
-                      <option key={q.quizId} value={q.quizId}>{q.title}</option>
+                      <option key={q.quizId} value={q.quizId}>
+                        {q.title}
+                      </option>
                     ))}
                   </select>
                 ) : (
                   <div className="flex flex-col gap-2">
-                    <p className="text-sm text-muted-foreground">You haven't created any quizzes yet.</p>
+                    <p className="text-sm text-muted-foreground">
+                      You haven't created any quizzes yet.
+                    </p>
                     <Link href="/quiz/create">
-                      <Button type="button" variant="outline" size="sm" className="w-fit">Create a Quiz</Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="w-fit"
+                      >
+                        Create a Quiz
+                      </Button>
                     </Link>
                   </div>
                 )}
@@ -262,14 +294,20 @@ export default function ScheduleSessionPage() {
                 <Input
                   type="number"
                   value={timeLimit}
-                  onChange={(e) => setTimeLimit(parseInt(e.target.value) || 600)}
+                  onChange={(e) =>
+                    setTimeLimit(parseInt(e.target.value) || 600)
+                  }
                   min={60}
                   className="mt-2"
                   placeholder="Custom (in seconds)"
                 />
               </Field>
 
-              <Button type="submit" disabled={loading} className="w-full">
+              <Button
+                type="submit"
+                disabled={loading}
+                className="w-full"
+              >
                 <CalendarClock className="mr-2 h-4 w-4" />
                 {loading ? "Scheduling..." : "Schedule Session"}
               </Button>

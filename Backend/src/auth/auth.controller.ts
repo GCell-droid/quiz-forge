@@ -9,6 +9,7 @@ import {
   Req,
   Res,
   UseGuards,
+  UnauthorizedException,
 } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { RegisterDTO } from './dto/register.dto';
@@ -65,8 +66,11 @@ export class AuthController {
   }
 
   @Post('/register')
-  register(@Body() registerdto: RegisterDTO) {
-    return this.authService.register(registerdto);
+  register(
+    @Body() registerdto: RegisterDTO,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    return this.authService.register(registerdto, res);
   }
 
   @UseGuards(jwtAuthGuard)
@@ -74,6 +78,19 @@ export class AuthController {
   logout(@Res({ passthrough: true }) res: Response) {
     this.authService.logout(res);
     return { message: 'Logged out successfully' };
+  }
+
+  @Post('/refresh')
+  async refresh(
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    // The refresh_token cookie is signed, so we access it via signedCookies
+    const refreshToken = req.signedCookies['refresh_token'];
+    if (!refreshToken) {
+      throw new UnauthorizedException('No refresh token provided');
+    }
+    return this.authService.refreshToken(refreshToken, res);
   }
 
   @UseGuards(jwtAuthGuard)

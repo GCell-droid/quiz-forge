@@ -27,7 +27,7 @@ export class AuthService {
     private readonly configService: ConfigService,
   ) {}
 
-  async register(registerdto: RegisterDTO) {
+  async register(registerdto: RegisterDTO, res: Response) {
     try {
       const existingUser = await this.userRepository.findOne({
         where: { email: registerdto.email },
@@ -49,10 +49,12 @@ export class AuthService {
 
       const { passwordHash, ...result } = savedUser;
       const tokens = this.generateToken(savedUser);
+      this.setAuthCookies(tokens, res);
+      
       return {
         user: result,
         needsRole: false,
-        messsage: 'Registration Successfull',
+        message: 'Registration Successful',
       };
     } catch (err) {
       throw new ConflictException('Registration failed');
@@ -160,7 +162,7 @@ export class AuthService {
     });
   }
 
-  async refreshToken(refreshToken: string) {
+  async refreshToken(refreshToken: string, res: Response) {
     try {
       const jwtSecret = this.configService.get<string>('JWT_SECRET');
       const payload = this.jwtService.verify(refreshToken, {
@@ -174,8 +176,18 @@ export class AuthService {
         where: { uid: payload.sub as any },
       });
       if (!user) throw new UnauthorizedException('Invalid Token');
+      
       const accessToken = this.generateAccessToken(user);
-      return { accessToken };
+      
+      res.cookie('jwt', accessToken, {
+        httpOnly: true,
+        secure: true,
+        sameSite: 'lax',
+        maxAge: 4 * 60 * 60 * 1000,
+        signed: true,
+      });
+
+      return { message: 'Token refreshed successfully' };
     } catch (e) {
       throw new UnauthorizedException('Invalid Token');
     }
@@ -241,7 +253,7 @@ export class AuthService {
       httpOnly: true,
       secure: true,
       sameSite: 'lax',
-      maxAge: 15 * 60 * 1000,
+      maxAge: 4 * 60 * 60 * 1000,
       signed: true,
     });
 

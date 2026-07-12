@@ -7,7 +7,6 @@ import { GeminiModule } from './gemini/gemini.module';
 import { ThrottlerModule } from '@nestjs/throttler';
 import { QuizzesModule } from './quizzes/quizzes.module';
 import { SessionsModule } from './sessions/sessions.module';
-import { ResponsesModule } from './responses/responses.module';
 import { AnalyticsModule } from './analytics/analytics.module';
 import { UsersModule } from './user/user.module';
 import { RedisModule } from './redis/redis.module';
@@ -31,6 +30,7 @@ import { BullModule } from '@nestjs/bullmq';
       },
       autoLoadEntities: true,
       synchronize: true,
+      // dropSchema: true,
     }),
     ScheduleModule.forRoot(),
     BullModule.forRootAsync({
@@ -57,7 +57,6 @@ import { BullModule } from '@nestjs/bullmq';
     GeminiModule,
     QuizzesModule,
     SessionsModule,
-    ResponsesModule,
     AnalyticsModule,
     UsersModule,
     RedisModule,

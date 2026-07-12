@@ -23,6 +23,7 @@ export default function LiveQuizPage() {
   const { user } = useAuth();
   
   const [quizData, setQuizData] = useState<QuizStartedPayload | null>(null);
+  const [joinError, setJoinError] = useState<string | null>(null);
   const [isCreator, setIsCreator] = useState(false);
   const [initialAnswers, setInitialAnswers] = useState<any[]>([]);
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
@@ -47,6 +48,8 @@ export default function LiveQuizPage() {
       if (response && response.error) {
         if (response.error === 'Session has ended') {
           setCompleted(true);
+        } else {
+          setJoinError(response.error);
         }
       } else if (response && response.success) {
         if (response.data?.isCreator) {
@@ -126,6 +129,12 @@ export default function LiveQuizPage() {
     return () => clearInterval(timer);
   }, [quizData, completed, timeLeft]);
 
+  useEffect(() => {
+    if (completed && isCreator) {
+      router.push(`/sessions/${sessionId}`);
+    }
+  }, [completed, isCreator, router, sessionId]);
+
   const handleAnswer = (selectedOption: string) => {
     if (!quizData || !user) return;
     
@@ -136,7 +145,7 @@ export default function LiveQuizPage() {
     
     const socket = getSocket();
     socket.emit("submitAnswer", {
-      sessionId,
+      sessionId: quizData.sessionId, // Use actual UUID, not potentially the join code from URL
       questionId: currentQuestion.questionId,
       userId: user.uid,
       response: selectedOption,
@@ -166,12 +175,31 @@ export default function LiveQuizPage() {
     }
   };
 
+  if (joinError) {
+    return (
+      <div className="flex h-[calc(100vh-4rem)] flex-col items-center justify-center space-y-6 p-4">
+        <Card className="border-border/50 text-center shadow-lg max-w-lg w-full">
+          <CardHeader>
+            <CardTitle className="text-2xl text-destructive font-heading">
+              Failed to Join
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            <p className="text-muted-foreground">{joinError}</p>
+            <Button onClick={() => router.push("/dashboard")} className="w-full">
+              Back to Dashboard
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
   if (!quizData) {
     return <Loading fullPage message="Waiting for quiz data..." />;
   }
 
   if (completed && isCreator) {
-    router.push(`/sessions/${sessionId}/results`);
     return <Loading fullPage message="Quiz concluded. Redirecting to results..." />;
   }
 

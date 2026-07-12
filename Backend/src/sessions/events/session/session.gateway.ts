@@ -15,7 +15,7 @@ import { SessionsService } from '../../sessions.service';
 
 @WebSocketGateway({
   cors: {
-    origin: ['http://localhost:3000'],
+    origin: process.env.FRONTEND_URL || 'http://localhost:3000',
     credentials: true,
   },
 })
@@ -39,13 +39,24 @@ export class SessionGateway implements OnGatewayDisconnect {
     @MessageBody() data: { sessionId: string },
   ) {
     try {
-      const result = await this.sessionsService.processJoinSession(data.sessionId, client.user?.userId);
+      const result = await this.sessionsService.processJoinSession(
+        data.sessionId,
+        client.user?.userId,
+      );
 
       if (result.error || !result.data) {
         return { error: result.error || 'Session not found' };
       }
 
-      const { sessionId, status, scheduledStart, isCreator, initialStats, quizPayload, answeredQuestionIds } = result.data;
+      const {
+        sessionId,
+        status,
+        scheduledStart,
+        isCreator,
+        initialStats,
+        quizPayload,
+        answeredQuestionIds,
+      } = result.data;
       const roomName = `session_${sessionId}`;
 
       client.join(roomName);
@@ -56,8 +67,10 @@ export class SessionGateway implements OnGatewayDisconnect {
       if (isCreator) {
         const teacherRoom = `session_${sessionId}_teacher`;
         client.join(teacherRoom);
-        console.log(`[Socket] Teacher ${client.id} joined room: ${teacherRoom}`);
-        
+        console.log(
+          `[Socket] Teacher ${client.id} joined room: ${teacherRoom}`,
+        );
+
         if (initialStats && initialStats.length > 0) {
           client.emit('initial_stats', { stats: initialStats });
         }
@@ -78,7 +91,6 @@ export class SessionGateway implements OnGatewayDisconnect {
           answeredQuestionIds,
         },
       };
-
     } catch (error) {
       console.error(
         `[Socket] Error checking active session state for ${data.sessionId}:`,
@@ -106,45 +118,73 @@ export class SessionGateway implements OnGatewayDisconnect {
       return { error: 'Unauthorized' };
     }
 
-    // 1. Instantly push answer to BullMQ queue for async processing
-    await this.answerIngestionQueue.add('submit-answer', {
-      sessionId: data.sessionId,
-      questionId: data.questionId,
-      userId: actualUserId,
-      response: data.response,
-      timeTakenSecs: data.timeTakenSecs,
-    });
-
-    try {
-      const { isCorrect, pointsScored } = await this.sessionsService.evaluateAnswer(
-        data.sessionId,
-        data.questionId,
-        data.response
-      );
-
-      const userName = await this.sessionsService.getUserName(actualUserId, client.user?.email, client.user?.name);
-      if (client.user && !client.user.name) client.user.name = userName;
-
-      const answerPayload = {
-        questionId: data.questionId,
-        userId: actualUserId,
-        userName,
-        response: data.response,
-        timeTakenSecs: data.timeTakenSecs,
-        isCorrect,
-        pointsScored,
-      };
-
-      await this.sessionsService.saveAnswerToRedis(data.sessionId, actualUserId, data.questionId, answerPayload);
-
-      const teacherRoom = `session_${data.sessionId}_teacher`;
-      this.server.to(teacherRoom).emit('live_answer_submitted', answerPayload);
-
-    } catch (error) {
-      console.error('[Socket] Failed to evaluate or broadcast answer:', error);
+    const teacherRoom = `session_${data.sessionId}_teacher`;
+    if (client.rooms.has(teacherRoom)) {
+      return { error: 'Creators cannot submit answers' };
     }
 
-    // 2. Return immediate acknowledgement to client
+    // 1. Instantly push answer to BullMQ queue for async processing
+    await this.answerIngestionQueue.add(
+      'submit-answer',
+      {
+        sessionId: data.sessionId,
+        questionId: data.questionId,
+        userId: actualUserId,
+        response: data.response,
+        timeTakenSecs: data.timeTakenSecs,
+      },
+      {
+        jobId: `answer-${data.sessionId}-${data.questionId}-${actualUserId}`,
+      },
+    );
+
+    // 2. Offload the evaluation and broadcast to run asynchronously in the background
+    // so the client receives the acknowledgement instantly and the app feels lightning fast.
+    Promise.resolve().then(async () => {
+      try {
+        const { isCorrect, pointsScored } =
+          await this.sessionsService.evaluateAnswer(
+            data.sessionId,
+            data.questionId,
+            data.response,
+          );
+
+        const userName = await this.sessionsService.getUserName(
+          actualUserId,
+          client.user?.email,
+          client.user?.name,
+        );
+        if (client.user && !client.user.name) client.user.name = userName;
+
+        const answerPayload = {
+          questionId: data.questionId,
+          userId: actualUserId,
+          userName,
+          response: data.response,
+          timeTakenSecs: data.timeTakenSecs,
+          isCorrect,
+          pointsScored,
+        };
+
+        await this.sessionsService.saveAnswerToRedis(
+          data.sessionId,
+          actualUserId,
+          data.questionId,
+          answerPayload,
+        );
+
+        this.server
+          .to(teacherRoom)
+          .emit('live_answer_submitted', answerPayload);
+      } catch (error) {
+        console.error(
+          '[Socket] Failed to evaluate or broadcast answer:',
+          error,
+        );
+      }
+    });
+
+    // 3. Return immediate acknowledgement to client
     return { success: true, message: 'Answer received' };
   }
 
@@ -157,7 +197,9 @@ export class SessionGateway implements OnGatewayDisconnect {
   private async broadcastParticipantCount(sessionId: string) {
     const roomName = `session_${sessionId}`;
     const sockets = await this.server.in(roomName).fetchSockets();
-    this.broadcastToSession(sessionId, 'participant_count_updated', { count: sockets.length });
+    this.broadcastToSession(sessionId, 'participant_count_updated', {
+      count: sockets.length,
+    });
   }
 
   async handleDisconnect(client: Socket) {

@@ -8,9 +8,11 @@ import {
   CreateDateColumn,
   ManyToOne,
   JoinColumn,
+  Unique,
 } from 'typeorm';
 
 @Entity('question_responses')
+@Unique(['session', 'question', 'user'])
 export class QuestionResponse {
   @PrimaryGeneratedColumn('uuid')
   responseId!: string;

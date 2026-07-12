@@ -16,8 +16,8 @@ import { QuizzesService } from '../quizzes/quizzes.service';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import User from '../common/entity/user.entity';
-import { QuestionResponse } from '../responses/entities/question-response.entity/question-response.entity';
 import { RedisService } from '../redis/redis.service';
+import { QuestionResponse } from './entities/question-response.entity/question-response.entity';
 
 @Injectable()
 export class SessionsService {
@@ -37,15 +37,20 @@ export class SessionsService {
     private readonly redisService: RedisService,
   ) {}
 
-  async getMyResults(userId: string, sessionId: string) {
+  async getMyResults(userId: string, sessionIdParam: string) {
+    const isUuid = sessionIdParam.length > 10;
     const session = await this.sessionRepo.findOne({
-      where: { sessionId },
+      where: isUuid
+        ? { sessionId: sessionIdParam }
+        : { joinCode: sessionIdParam },
       relations: ['quiz'],
     });
 
     if (!session) {
       throw new NotFoundException('Session not found');
     }
+
+    const sessionId = session.sessionId;
 
     const quiz = await this.quizzesService.getQuiz(session.quiz.quizId);
 
@@ -115,7 +120,9 @@ export class SessionsService {
     }
 
     if (new Date(scheduledStart).getTime() < Date.now()) {
-      throw new BadRequestException('Scheduled start time must be in the future');
+      throw new BadRequestException(
+        'Scheduled start time must be in the future',
+      );
     }
 
     const joinCode = this.generateJoinCode();
@@ -208,15 +215,20 @@ export class SessionsService {
     return Array.from(sessionMap.values());
   }
 
-  async getSessionStats(userId: string, sessionId: string) {
+  async getSessionStats(userId: string, sessionIdParam: string) {
+    const isUuid = sessionIdParam.length > 10;
     const session = await this.sessionRepo.findOne({
-      where: { sessionId },
+      where: isUuid
+        ? { sessionId: sessionIdParam }
+        : { joinCode: sessionIdParam },
       relations: ['quiz', 'createdBy'],
     });
 
     if (!session) {
       throw new NotFoundException('Session not found');
     }
+
+    const sessionId = session.sessionId;
 
     if (session.createdBy?.uid !== userId) {
       throw new ForbiddenException(
@@ -247,12 +259,14 @@ export class SessionsService {
       relations: ['user', 'question'],
     });
 
-    const initialStatsPayload = dbAnswers.map((ans) => ({
+    const initialStatsPayload = dbAnswers
+      .filter((ans) => ans.user?.uid !== session.createdBy?.uid)
+      .map((ans) => ({
       questionId: ans.question.questionId,
-      userId: ans.user.uid,
+      userId: ans.user?.uid,
       userName:
-        ans.user.name ||
-        (ans.user.email ? ans.user.email.split('@')[0] : 'Unknown'),
+        ans.user?.name ||
+        (ans.user?.email ? ans.user.email.split('@')[0] : 'Unknown'),
       response: ans.response,
       timeTakenSecs: ans.timeTakenSecs,
       isCorrect: ans.isCorrect,
@@ -306,12 +320,14 @@ export class SessionsService {
           relations: ['user', 'question'],
         });
 
-        initialStatsPayload = dbAnswers.map((ans) => ({
+        initialStatsPayload = dbAnswers
+          .filter((ans) => ans.user?.uid !== session.createdBy?.uid)
+          .map((ans) => ({
           questionId: ans.question.questionId,
-          userId: ans.user.uid,
+          userId: ans.user?.uid,
           userName:
-            ans.user.name ||
-            (ans.user.email ? ans.user.email.split('@')[0] : 'Unknown'),
+            ans.user?.name ||
+            (ans.user?.email ? ans.user.email.split('@')[0] : 'Unknown'),
           response: ans.response,
           timeTakenSecs: ans.timeTakenSecs,
           isCorrect: ans.isCorrect,
@@ -332,40 +348,46 @@ export class SessionsService {
 
     let quizPayload: any = null;
     let answeredQuestionIds: string[] = [];
-    
+
     if (!isCreator && userId) {
       // Check Redis first for instant access, even if BullMQ is delayed
       const answersKey = `quiz:session:${actualSessionId}:answers`;
       const cachedAnswers = await this.redisService.hgetall(answersKey);
-      
+
       if (cachedAnswers && Object.keys(cachedAnswers).length > 0) {
-        Object.keys(cachedAnswers).forEach(key => {
+        Object.keys(cachedAnswers).forEach((key) => {
           if (key.startsWith(`${userId}:`)) {
             answeredQuestionIds.push(key.split(':')[1]);
           }
         });
       }
-      
+
       // Fallback to DB if not found in Redis (or just to be safe)
       if (answeredQuestionIds.length === 0) {
         const dbAnswers = await this.questionResponseRepo.find({
-          where: { session: { sessionId: actualSessionId }, user: { uid: userId } },
-          relations: ['question']
+          where: {
+            session: { sessionId: actualSessionId },
+            user: { uid: userId },
+          },
+          relations: ['question'],
         });
-        answeredQuestionIds = dbAnswers.map(ans => ans.question.questionId);
+        answeredQuestionIds = dbAnswers.map((ans) => ans.question.questionId);
       }
     }
 
     const redisStatus = await this.redisService.get(
       `quiz:session:${actualSessionId}:status`,
     );
-    
+
     const isSessionActiveOrCompleted =
       redisStatus === SessionStatus.ACTIVE ||
       session.status === SessionStatus.ACTIVE;
 
     // If the session is already completed, reject join
-    if (!isSessionActiveOrCompleted && session.status === SessionStatus.COMPLETED) {
+    if (
+      !isSessionActiveOrCompleted &&
+      session.status === SessionStatus.COMPLETED
+    ) {
       return { error: 'Session has ended' };
     }
 
@@ -391,7 +413,7 @@ export class SessionsService {
           await this.redisService.set(
             cacheKey,
             JSON.stringify(quiz),
-            this.CACHE_TTL_SECONDS,
+            this.CACHE_TTL_SECONDS || 3600, // Hardcode TTL or use existing
           );
         }
       }
@@ -399,7 +421,9 @@ export class SessionsService {
       if (quiz && quiz.quizQuestions) {
         let remainingTime = session.timeLimit;
         if (session.actualStart) {
-          const elapsedSecs = Math.floor((Date.now() - session.actualStart.getTime()) / 1000);
+          const elapsedSecs = Math.floor(
+            (Date.now() - session.actualStart.getTime()) / 1000,
+          );
           remainingTime = Math.max(0, session.timeLimit - elapsedSecs);
         }
 
@@ -499,5 +523,16 @@ export class SessionsService {
       `${userId}:${questionId}`,
       JSON.stringify(payload),
     );
+  }
+
+  async isSessionCreator(sessionIdParam: string, userId: string): Promise<boolean> {
+    const isUuid = sessionIdParam.length > 10;
+    const session = await this.sessionRepo.findOne({
+      where: isUuid
+        ? { sessionId: sessionIdParam }
+        : { joinCode: sessionIdParam },
+      relations: ['createdBy'],
+    });
+    return session?.createdBy?.uid === userId;
   }
 }
