@@ -147,7 +147,7 @@ export default function ScheduleSessionPage() {
             </div>
 
             <div className="pt-2">
-              <Link href={`/quiz/live/${session.joinCode}`}>
+              <Link href={`/quiz/join?code=${session.joinCode}`}>
                 <Button className="w-full shadow-md font-semibold">
                   Join Session
                 </Button>

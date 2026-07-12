@@ -97,10 +97,10 @@ export class AnswerIngestionProcessor extends WorkerHost {
 
     // 4. Fetch User to broadcast userName
     const user = await this.userRepo.findOne({ where: { uid: userId } });
-    const userName = user?.name || (user?.email ? user.email.split('@')[0] : 'Unknown');
+    const userName =
+      user?.name || (user?.email ? user.email.split('@')[0] : 'Unknown');
 
-    // 5. Broadcast live_answer_submitted event to the room
-    this.sessionGateway.broadcastToSession(sessionId, 'live_answer_submitted', {
+    const answerPayload = {
       questionId,
       userId,
       userName,
@@ -108,7 +108,22 @@ export class AnswerIngestionProcessor extends WorkerHost {
       timeTakenSecs,
       isCorrect,
       pointsScored,
-    });
+    };
+
+    // 5. Save to Redis for high-performance retrieval (initialStats)
+    const answersKey = `quiz:session:${sessionId}:answers`;
+    await this.redisService.hset(
+      answersKey,
+      `${userId}:${questionId}`,
+      JSON.stringify(answerPayload),
+    );
+
+    // 6. Broadcast live_answer_submitted event to the room
+    this.sessionGateway.broadcastToSession(
+      sessionId,
+      'live_answer_submitted',
+      answerPayload,
+    );
   }
 
   private evaluateAnswer(question: any, response: string): boolean {

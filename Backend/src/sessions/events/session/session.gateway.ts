@@ -138,51 +138,7 @@ export class SessionGateway implements OnGatewayDisconnect {
       },
     );
 
-    // 2. Offload the evaluation and broadcast to run asynchronously in the background
-    // so the client receives the acknowledgement instantly and the app feels lightning fast.
-    Promise.resolve().then(async () => {
-      try {
-        const { isCorrect, pointsScored } =
-          await this.sessionsService.evaluateAnswer(
-            data.sessionId,
-            data.questionId,
-            data.response,
-          );
 
-        const userName = await this.sessionsService.getUserName(
-          actualUserId,
-          client.user?.email,
-          client.user?.name,
-        );
-        if (client.user && !client.user.name) client.user.name = userName;
-
-        const answerPayload = {
-          questionId: data.questionId,
-          userId: actualUserId,
-          userName,
-          response: data.response,
-          timeTakenSecs: data.timeTakenSecs,
-          isCorrect,
-          pointsScored,
-        };
-
-        await this.sessionsService.saveAnswerToRedis(
-          data.sessionId,
-          actualUserId,
-          data.questionId,
-          answerPayload,
-        );
-
-        this.server
-          .to(teacherRoom)
-          .emit('live_answer_submitted', answerPayload);
-      } catch (error) {
-        console.error(
-          '[Socket] Failed to evaluate or broadcast answer:',
-          error,
-        );
-      }
-    });
 
     // 3. Return immediate acknowledgement to client
     return { success: true, message: 'Answer received' };
