@@ -18,10 +18,14 @@ import {
 import { CreateQuizDto, UpdateQuizDto } from './dto/quiz.dto';
 import { CreateQuestionDto, UpdateQuestionDto } from './dto/question.dto';
 import { jwtAuthGuard } from '../auth/guards/jwtguard/jwt-auth.guard';
+import { RoleGuard } from '../auth/guards/roles-guard/roles.guard';
+import { Roles } from '../auth/decorators/roles.decorator';
+import { UserRole } from '../common/enums/enum';
 import { CurrentUser } from '../auth/decorators/currentUser.decorator';
 
 @Controller('quizzes')
-@UseGuards(jwtAuthGuard)
+@UseGuards(jwtAuthGuard, RoleGuard)
+@Roles(UserRole.TEACHER)
 export class QuizzesController {
   constructor(
     private readonly quizzesService: QuizzesService,

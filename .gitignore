@@ -39,7 +39,7 @@ Backend/.env.*
 # =========================
 # FRONTEND (Next.js)
 # =========================
-Redis_Server
+Redis_Server/node_modules/
 # dependencies
 Frontend/node_modules/
 Frontend/.next/
