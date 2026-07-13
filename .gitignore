@@ -12,6 +12,7 @@ yarn-error.log*
 
 # Personal notes & Architecture Documentation
 README.md
+Backend/quizz.md
 Backend/learned.md
 Backend/notes.md
 Backend/quizz.md

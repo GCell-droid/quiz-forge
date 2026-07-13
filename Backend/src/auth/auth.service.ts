@@ -181,8 +181,8 @@ export class AuthService {
       
       res.cookie('jwt', accessToken, {
         httpOnly: true,
-        secure: true,
-        sameSite: 'lax',
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
         maxAge: 4 * 60 * 60 * 1000,
         signed: true,
       });
@@ -251,16 +251,16 @@ export class AuthService {
   ) {
     res.cookie('jwt', tokens.accessToken, {
       httpOnly: true,
-      secure: true,
-      sameSite: 'lax',
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
       maxAge: 4 * 60 * 60 * 1000,
       signed: true,
     });
 
     res.cookie('refresh_token', tokens.refreshToken, {
       httpOnly: true,
-      secure: true,
-      sameSite: 'lax',
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
       maxAge: 7 * 24 * 60 * 60 * 1000,
       signed: true,
     });
@@ -269,14 +269,14 @@ export class AuthService {
   public logout(res: Response) {
     res.clearCookie('jwt', {
       httpOnly: true,
-      secure: true,
-      sameSite: 'lax',
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
     });
 
     res.clearCookie('refresh_token', {
       httpOnly: true,
-      secure: true,
-      sameSite: 'lax',
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
     });
   }
 }
