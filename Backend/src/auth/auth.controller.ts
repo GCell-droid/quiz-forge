@@ -46,7 +46,7 @@ export class AuthController {
     @Res({ passthrough: true }) res: Response,
   ) {
     const { tokens, needsRole, message } = req.user as any;
-    const frontendUrl = this.configService.get<string>('FRONTEND_URL');
+    const frontendUrl = this.configService.get<string>('FRONTEND_URL') || 'http://localhost:3000';
     if (tokens) {
       this.authService.setAuthCookies(tokens, res);
     }
