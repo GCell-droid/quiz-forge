@@ -1,16 +1,14 @@
 import { io, Socket } from "socket.io-client";
+import { BACKEND_URL } from "@/lib/env";
 
 let socket: Socket | null = null;
 
 export const getSocket = (): Socket => {
   if (!socket) {
-    socket = io(
-      process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:7777",
-      {
-        withCredentials: true,
-        autoConnect: false, // connect manually when needed
-      },
-    );
+    socket = io(BACKEND_URL, {
+      withCredentials: true,
+      autoConnect: false, // connect manually when needed
+    });
   }
   return socket;
 };

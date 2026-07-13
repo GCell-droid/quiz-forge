@@ -23,6 +23,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { ErrorMessage } from "@/components/shared/error-message";
 import { Mail, Lock, User } from "lucide-react";
+import { BACKEND_URL } from "@/lib/env";
 
 export function SignupForm({
   className,
@@ -36,7 +37,7 @@ export function SignupForm({
 
   const handleGoogleLogin = () => {
     setGoogleLoading(true);
-    window.location.href = `${process.env.NEXT_PUBLIC_BACKEND_URL}/auth/google`;
+    window.location.href = `${BACKEND_URL}/auth/google`;
   };
 
   async function handleSubmit(e: FormEvent<HTMLFormElement>) {
@@ -169,7 +170,8 @@ export function SignupForm({
                   />
                 </div>
                 <p className="text-xs text-muted-foreground mt-1">
-                  Min 8 chars, 1 uppercase, 1 lowercase, 1 number, 1 symbol
+                  Min 8 chars, 1 uppercase, 1 lowercase, 1 number, 1
+                  symbol
                 </p>
               </Field>
 

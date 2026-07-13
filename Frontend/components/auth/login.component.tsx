@@ -23,6 +23,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { ErrorMessage } from "@/components/shared/error-message";
 import { Mail, Lock } from "lucide-react";
+import { BACKEND_URL } from "@/lib/env";
 
 export function LoginForm({
   className,
@@ -36,7 +37,7 @@ export function LoginForm({
 
   const handleGoogleLogin = () => {
     setGoogleLoading(true);
-    window.location.href = `${process.env.NEXT_PUBLIC_BACKEND_URL}/auth/google`;
+    window.location.href = `${BACKEND_URL}/auth/google`;
   };
 
   async function handleSubmit(e: FormEvent<HTMLFormElement>) {
@@ -75,7 +76,9 @@ export function LoginForm({
               QF
             </span>
           </div>
-          <CardTitle className="text-2xl font-heading">Welcome back</CardTitle>
+          <CardTitle className="text-2xl font-heading">
+            Welcome back
+          </CardTitle>
           <CardDescription>
             Sign in to your Quiz Forge account
           </CardDescription>

@@ -1,7 +1,8 @@
 import axios from "axios";
+import { BACKEND_URL } from "@/lib/env";
 
 const api = axios.create({
-  baseURL: process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:7777",
+  baseURL: BACKEND_URL,
   withCredentials: true,
   headers: { "Content-Type": "application/json" },
 });
@@ -29,12 +30,15 @@ api.interceptors.response.use(
     // Check if error is 401 and request hasn't already been retried
     if (error.response?.status === 401 && !originalRequest._retry) {
       // Don't intercept calls that are explicitly trying to refresh or login
-      if (originalRequest.url === '/auth/refresh' || originalRequest.url === '/auth/login') {
+      if (
+        originalRequest.url === "/auth/refresh" ||
+        originalRequest.url === "/auth/login"
+      ) {
         return Promise.reject(error);
       }
 
       if (isRefreshing) {
-        return new Promise(function(resolve, reject) {
+        return new Promise(function (resolve, reject) {
           failedQueue.push({ resolve, reject });
         })
           .then(() => {
@@ -49,15 +53,15 @@ api.interceptors.response.use(
       isRefreshing = true;
 
       try {
-        await api.post('/auth/refresh');
+        await api.post("/auth/refresh");
         processQueue(null);
         return api(originalRequest);
       } catch (err) {
         processQueue(err, null);
         // If refresh fails, it means refresh token is dead.
         // Redirect to login or let the app handle it via Context.
-        if (typeof window !== 'undefined') {
-          window.location.href = '/login';
+        if (typeof window !== "undefined") {
+          window.location.href = "/login";
         }
         return Promise.reject(err);
       } finally {
@@ -66,7 +70,7 @@ api.interceptors.response.use(
     }
 
     return Promise.reject(error);
-  }
+  },
 );
 
 export default api;
