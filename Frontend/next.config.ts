@@ -4,11 +4,20 @@ const nextConfig: NextConfig = {
   /* config options here */
   reactCompiler: true,
   async rewrites() {
+    const backendUrl = process.env.BACKEND_URL || 'http://localhost:7777';
     return [
+      // Explicitly proxy socket.io and FORCE the trailing slash for the backend
+      {
+        source: "/api/socket.io",
+        destination: `${backendUrl}/socket.io/`,
+      },
+      {
+        source: "/api/socket.io/:path*",
+        destination: `${backendUrl}/socket.io/:path*`,
+      },
       {
         source: "/api/:path*",
-        // In production, BACKEND_URL should be set to your deployed backend URL.
-        destination: `${process.env.BACKEND_URL || 'http://localhost:7777'}/:path*`, 
+        destination: `${backendUrl}/:path*`, 
       },
     ];
   },
