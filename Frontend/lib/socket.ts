@@ -5,9 +5,13 @@ let socket: Socket | null = null;
 
 export const getSocket = (): Socket => {
   if (!socket) {
-    socket = io(BACKEND_URL, {
+    // If BACKEND_URL is a proxy path like '/api', we route the socket through it
+    const isProxy = BACKEND_URL.startsWith("/");
+
+    socket = io(isProxy ? undefined : BACKEND_URL, {
+      path: isProxy ? `${BACKEND_URL}/socket.io` : "/socket.io",
       withCredentials: true,
-      autoConnect: false, // connect manually when needed
+      autoConnect: false,
     });
   }
   return socket;
