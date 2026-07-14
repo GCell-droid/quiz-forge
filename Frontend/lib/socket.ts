@@ -9,7 +9,7 @@ export const getSocket = (): Socket => {
     const isProxy = BACKEND_URL.startsWith("/");
 
     socket = io(isProxy ? undefined : BACKEND_URL, {
-      path: isProxy ? `${BACKEND_URL}/socket.io` : "/socket.io",
+      path: isProxy ? `${BACKEND_URL}/socket.io/` : "/socket.io/",
       withCredentials: true,
       autoConnect: false,
     });
