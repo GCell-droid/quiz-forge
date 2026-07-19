@@ -47,13 +47,13 @@ export class QuizSession {
   })
   status!: SessionStatus;
 
-  @Column({ type: 'timestamp' })
+  @Column({ type: 'timestamptz' })
   scheduledStart!: Date;
 
-  @Column({ type: 'timestamp', nullable: true })
+  @Column({ type: 'timestamptz', nullable: true })
   actualStart!: Date;
 
-  @Column({ type: 'timestamp', nullable: true })
+  @Column({ type: 'timestamptz', nullable: true })
   endTime!: Date;
 
   @Column({ type: 'int' })

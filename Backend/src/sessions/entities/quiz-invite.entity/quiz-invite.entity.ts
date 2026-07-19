@@ -41,6 +41,6 @@ export class QuizInvite {
   @CreateDateColumn()
   invitedAt!: Date;
 
-  @Column({ type: 'timestamp', nullable: true })
+  @Column({ type: 'timestamptz', nullable: true })
   respondedAt!: Date;
 }

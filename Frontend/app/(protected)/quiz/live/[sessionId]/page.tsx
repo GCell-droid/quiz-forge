@@ -95,19 +95,9 @@ export default function LiveQuizPage() {
   // Handle resuming from answered questions
   useEffect(() => {
     if (quizData && answeredQuestionIds.length > 0) {
-      let nextIndex = 0;
-      for (let i = 0; i < quizData.questions.length; i++) {
-        if (!answeredQuestionIds.includes(quizData.questions[i].questionId)) {
-          nextIndex = i;
-          break;
-        }
-      }
-      
-      // If all questions are answered
-      if (nextIndex === 0 && answeredQuestionIds.length === quizData.questions.length) {
+      const totalCount = quizData.totalQuestions || quizData.questions.length;
+      if (answeredQuestionIds.length >= totalCount) {
         setCompleted(true);
-      } else {
-        setCurrentQuestionIndex(nextIndex);
       }
     }
   }, [quizData, answeredQuestionIds]);
@@ -138,7 +128,10 @@ export default function LiveQuizPage() {
   const handleAnswer = (selectedOption: string) => {
     if (!quizData || !user) return;
     
-    const currentQuestion = quizData.questions[currentQuestionIndex];
+    // For students, the server only sends the current question
+    const currentQuestion = quizData.questions[0];
+    if (!currentQuestion) return;
+    
     const timeTaken = Math.round((Date.now() - questionStartTime) / 1000);
     
     setSubmitting(true);
@@ -151,28 +144,27 @@ export default function LiveQuizPage() {
       response: selectedOption,
       timeTakenSecs: timeTaken,
     }, (ack: any) => {
-      setSubmitting(false);
-      moveToNextQuestion();
+      setAnsweredQuestionIds(prev => [...prev, currentQuestion.questionId]);
+      
+      socket.emit("requestNextQuestion", { sessionId: quizData.sessionId }, (res: any) => {
+        if (res.success && res.nextQuestion) {
+          setQuizData(prev => prev ? ({ ...prev, questions: [res.nextQuestion] }) : prev);
+          setQuestionStartTime(Date.now());
+          setSubmitting(false);
+        } else {
+          setCompleted(true);
+          setSubmitting(false);
+        }
+      });
     });
     
     // Fallback if no ack
     setTimeout(() => {
       if (submitting) {
         setSubmitting(false);
-        moveToNextQuestion();
+        setCompleted(true);
       }
-    }, 1500);
-  };
-
-  const moveToNextQuestion = () => {
-    if (!quizData) return;
-    
-    if (currentQuestionIndex < quizData.questions.length - 1) {
-      setCurrentQuestionIndex((prev) => prev + 1);
-      setQuestionStartTime(Date.now());
-    } else {
-      setCompleted(true);
-    }
+    }, 5000);
   };
 
   if (joinError) {
@@ -235,8 +227,14 @@ export default function LiveQuizPage() {
     );
   }
 
-  const currentQuestion = quizData.questions[currentQuestionIndex];
-  const progress = ((currentQuestionIndex) / quizData.questions.length) * 100;
+  const totalCount = quizData.totalQuestions || quizData.questions.length;
+  const currentNumber = Math.min(answeredQuestionIds.length + 1, totalCount);
+  const currentQuestion = quizData.questions[0];
+  const progress = ((currentNumber - 1) / totalCount) * 100;
+
+  if (!currentQuestion && !completed) {
+    return <Loading fullPage message="Loading next question..." />;
+  }
 
   return (
     <div className="mx-auto max-w-3xl px-4 py-8 sm:px-6 lg:px-8">
@@ -247,7 +245,7 @@ export default function LiveQuizPage() {
             {quizData.quizTitle}
           </h1>
           <p className="text-sm text-muted-foreground">
-            Question {currentQuestionIndex + 1} of {quizData.questions.length}
+            Question {currentNumber} of {totalCount}
           </p>
         </div>
         <div className="flex items-center gap-3">

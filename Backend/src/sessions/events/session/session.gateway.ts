@@ -144,6 +144,27 @@ export class SessionGateway implements OnGatewayDisconnect {
     return { success: true, message: 'Answer received' };
   }
 
+  @SubscribeMessage('requestNextQuestion')
+  async handleRequestNextQuestion(
+    @ConnectedSocket() client: Socket & { user?: any },
+    @MessageBody() data: { sessionId: string },
+  ) {
+    const actualUserId = client.user?.userId;
+    if (!actualUserId) return { error: 'Unauthorized' };
+
+    // Wait a brief moment to ensure the async BullMQ worker has processed 
+    // the previous submitAnswer and written it to Redis before we check for the next question.
+    await new Promise((resolve) => setTimeout(resolve, 400));
+
+    const nextQuestion = await this.sessionsService.getNextQuestionForUser(
+      data.sessionId,
+      actualUserId,
+    );
+
+    return { success: true, nextQuestion };
+  }
+
+
   broadcastToSession(sessionId: string, event: string, data: any) {
     const roomName = `session_${sessionId}`;
     this.server.to(roomName).emit(event, data);

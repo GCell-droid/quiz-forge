@@ -37,7 +37,7 @@ export class QuizParticipant {
   @CreateDateColumn()
   joinedAt!: Date;
 
-  @Column({ type: 'timestamp', nullable: true })
+  @Column({ type: 'timestamptz', nullable: true })
   leftAt!: Date;
 
   @Column({

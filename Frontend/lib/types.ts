@@ -142,6 +142,7 @@ export interface QuizStartedPayload {
     options: string[] | null;
     points: number;
   }[];
+  totalQuestions?: number;
   timeLimit: number;
 }
 

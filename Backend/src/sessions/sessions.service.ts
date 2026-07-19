@@ -400,16 +400,37 @@ export class SessionsService {
           remainingTime = Math.max(0, session.timeLimit - elapsedSecs);
         }
 
-        quizPayload = {
-          sessionId: actualSessionId,
-          quizTitle: quiz.title,
-          questions: quiz.quizQuestions.map((qq: any) => ({
+        let questionsToReturn: any[] = [];
+        if (isCreator) {
+          questionsToReturn = quiz.quizQuestions.map((qq: any) => ({
             questionId: qq.question.questionId,
             title: qq.question.title,
             type: qq.question.type,
             options: qq.question.options,
             points: qq.question.points,
-          })),
+          }));
+        } else {
+          const unanswered = quiz.quizQuestions.find(
+            (qq: any) => !answeredQuestionIds.includes(qq.question.questionId),
+          );
+          if (unanswered) {
+            questionsToReturn = [
+              {
+                questionId: unanswered.question.questionId,
+                title: unanswered.question.title,
+                type: unanswered.question.type,
+                options: unanswered.question.options,
+                points: unanswered.question.points,
+              },
+            ];
+          }
+        }
+
+        quizPayload = {
+          sessionId: actualSessionId,
+          quizTitle: quiz.title,
+          questions: questionsToReturn,
+          totalQuestions: quiz.quizQuestions.length,
           timeLimit: remainingTime,
         };
       }
@@ -567,5 +588,14 @@ export class SessionsService {
     }
 
     return mergedArray;
+  }
+
+  async getNextQuestionForUser(sessionId: string, userId: string) {
+    const sessionRes = await this.processJoinSession(sessionId, userId);
+    if (!sessionRes.data || !sessionRes.data.quizPayload) {
+      return null;
+    }
+    const questions = sessionRes.data.quizPayload.questions;
+    return questions && questions.length > 0 ? questions[0] : null;
   }
 }
