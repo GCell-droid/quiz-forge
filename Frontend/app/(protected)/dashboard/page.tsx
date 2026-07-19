@@ -257,9 +257,9 @@ export default function DashboardPage() {
         </div>
       ) : (
         /* Student Dashboard */
-        <div className="space-y-8">
+        <div className="grid gap-8 lg:grid-cols-2 max-w-5xl mx-auto items-stretch">
           {/* Join Quiz Card */}
-          <Card className="mx-auto max-w-lg border-border/50 shadow-lg">
+          <Card className="border-border/50 shadow-lg flex flex-col justify-center h-full">
             <CardHeader className="text-center">
               <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-primary/10">
                 <LogIn className="h-7 w-7 text-primary" />
@@ -297,24 +297,24 @@ export default function DashboardPage() {
           </Card>
 
           {/* Overview Cards */}
-          <div className="grid gap-6 sm:grid-cols-2">
-            <Card className="border-border/50">
-              <CardHeader>
-                <CardTitle className="text-lg font-heading">
-                  Recent Results
-                </CardTitle>
-                <CardDescription>
-                  Your quiz history will appear here
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                {loadingHistory ? (
-                  <div className="flex justify-center py-8">
-                    <div className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-                  </div>
-                ) : history.length > 0 ? (
-                  <div className="space-y-4 pt-2">
-                    {history.map((item) => (
+          <Card className="border-border/50 flex flex-col h-full">
+            <CardHeader>
+              <CardTitle className="text-lg font-heading">
+                Recent Results
+              </CardTitle>
+              <CardDescription>
+                Your quiz history will appear here
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="flex-1 flex flex-col">
+              {loadingHistory ? (
+                <div className="flex justify-center py-8 flex-1">
+                  <div className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+                </div>
+              ) : history.length > 0 ? (
+                <>
+                  <div className="space-y-4 pt-2 mb-4 flex-1">
+                    {history.slice(0, 5).map((item) => (
                       <Link 
                         key={item.sessionId} 
                         href={`/sessions/${item.sessionId}/results`}
@@ -339,35 +339,22 @@ export default function DashboardPage() {
                       </Link>
                     ))}
                   </div>
-                ) : (
-                  <div className="flex flex-col items-center justify-center py-8 text-muted-foreground">
-                    <Trophy className="mb-3 h-10 w-10 text-muted-foreground/40" />
-                    <p className="text-sm">No quiz results yet</p>
-                    <p className="text-xs">Join a session to get started!</p>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-
-            <Card className="border-border/50">
-              <CardHeader>
-                <CardTitle className="text-lg font-heading">
-                  Explore Bundles
-                </CardTitle>
-                <CardDescription>
-                  Browse public question bundles
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <Link href="/explore">
-                  <Button variant="outline" className="w-full">
-                    <BookOpen className="mr-2 h-4 w-4" />
-                    Browse Public Bundles
-                  </Button>
-                </Link>
-              </CardContent>
-            </Card>
-          </div>
+                  <Link
+                    href="/sessions"
+                    className="text-sm text-primary hover:underline mt-auto pt-4 block text-center"
+                  >
+                    View all results →
+                  </Link>
+                </>
+              ) : (
+                <div className="flex flex-col items-center justify-center py-8 text-muted-foreground flex-1">
+                  <Trophy className="mb-3 h-10 w-10 text-muted-foreground/40" />
+                  <p className="text-sm">No quiz results yet</p>
+                  <p className="text-xs">Join a session to get started!</p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
         </div>
       )}
     </div>

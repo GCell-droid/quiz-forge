@@ -4,7 +4,12 @@ const nextConfig: NextConfig = {
   /* config options here */
   reactCompiler: true,
   async rewrites() {
-    const backendUrl = process.env.BACKEND_URL || 'http://localhost:7777';
+    // Automatically use local server in dev mode, otherwise use production BACKEND_URL
+    const isDev = process.env.NODE_ENV !== 'production';
+    const backendUrl = isDev 
+      ? 'http://localhost:7777' 
+      : (process.env.BACKEND_URL || 'http://localhost:7777');
+      
     return [
       // Explicitly proxy socket.io and FORCE the trailing slash for the backend
       {

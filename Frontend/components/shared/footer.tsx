@@ -17,12 +17,6 @@ export function Footer() {
 
         <nav className="flex items-center gap-6">
           <Link
-            href="/explore"
-            className="text-sm text-muted-foreground transition-colors hover:text-foreground"
-          >
-            Explore
-          </Link>
-          <Link
             href="/dashboard"
             className="text-sm text-muted-foreground transition-colors hover:text-foreground"
           >

@@ -20,13 +20,11 @@ import {
 const teacherLinks = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/bundles", label: "Bundles", icon: FolderOpen },
-  { href: "/explore", label: "Explore", icon: Compass },
   { href: "/quiz/generate", label: "AI Generate", icon: Sparkles },
 ];
 
 const studentLinks = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/explore", label: "Explore", icon: Compass },
   { href: "/quiz/join", label: "Join Quiz", icon: Sparkles },
 ];
 
