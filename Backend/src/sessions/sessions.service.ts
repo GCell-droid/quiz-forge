@@ -5,6 +5,7 @@ import {
   forwardRef,
   ForbiddenException,
   BadRequestException,
+  InternalServerErrorException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -125,18 +126,38 @@ export class SessionsService {
       );
     }
 
-    const joinCode = this.generateJoinCode();
+    let savedSession!: QuizSession;
+    let retries = 0;
+    const MAX_RETRIES = 5;
 
-    const session = this.sessionRepo.create({
-      quiz,
-      createdBy: { uid: userId } as User,
-      joinCode,
-      status: SessionStatus.SCHEDULED,
-      scheduledStart,
-      timeLimit,
-    });
+    while (retries < MAX_RETRIES) {
+      try {
+        const joinCode = this.generateJoinCode();
 
-    const savedSession = await this.sessionRepo.save(session);
+        const session = this.sessionRepo.create({
+          quiz,
+          createdBy: { uid: userId } as User,
+          joinCode,
+          status: SessionStatus.SCHEDULED,
+          scheduledStart,
+          timeLimit,
+        });
+
+        savedSession = await this.sessionRepo.save(session);
+        break;
+      } catch (error: any) {
+        if (error.code === '23505') {
+          retries++;
+          if (retries === MAX_RETRIES) {
+            throw new InternalServerErrorException(
+              'Failed to generate a unique join code after multiple attempts',
+            );
+          }
+        } else {
+          throw error;
+        }
+      }
+    }
 
     const now = Date.now();
     const startTimeMs = new Date(scheduledStart).getTime();
@@ -254,24 +275,10 @@ export class SessionsService {
       };
     }
 
-    const dbAnswers = await this.questionResponseRepo.find({
-      where: { session: { sessionId } },
-      relations: ['user', 'question'],
-    });
-
-    const initialStatsPayload = dbAnswers
-      .filter((ans) => ans.user?.uid !== session.createdBy?.uid)
-      .map((ans) => ({
-      questionId: ans.question.questionId,
-      userId: ans.user?.uid,
-      userName:
-        ans.user?.name ||
-        (ans.user?.email ? ans.user.email.split('@')[0] : 'Unknown'),
-      response: ans.response,
-      timeTakenSecs: ans.timeTakenSecs,
-      isCorrect: ans.isCorrect,
-      pointsScored: ans.pointsScored,
-    }));
+    const initialStatsPayload = await this.getMergedAnswers(
+      sessionId,
+      session.createdBy?.uid,
+    );
 
     return {
       success: true,
@@ -307,43 +314,10 @@ export class SessionsService {
     let initialStatsPayload: any[] = [];
 
     if (isCreator) {
-      const answersKey = `quiz:session:${actualSessionId}:answers`;
-      const cachedAnswers = await this.redisService.hgetall(answersKey);
-
-      if (cachedAnswers && Object.keys(cachedAnswers).length > 0) {
-        initialStatsPayload = Object.values(cachedAnswers).map((v) =>
-          JSON.parse(v),
-        );
-      } else {
-        const dbAnswers = await this.questionResponseRepo.find({
-          where: { session: { sessionId: actualSessionId } },
-          relations: ['user', 'question'],
-        });
-
-        initialStatsPayload = dbAnswers
-          .filter((ans) => ans.user?.uid !== session.createdBy?.uid)
-          .map((ans) => ({
-          questionId: ans.question.questionId,
-          userId: ans.user?.uid,
-          userName:
-            ans.user?.name ||
-            (ans.user?.email ? ans.user.email.split('@')[0] : 'Unknown'),
-          response: ans.response,
-          timeTakenSecs: ans.timeTakenSecs,
-          isCorrect: ans.isCorrect,
-          pointsScored: ans.pointsScored,
-        }));
-
-        if (initialStatsPayload.length > 0) {
-          for (const stat of initialStatsPayload) {
-            await this.redisService.hset(
-              answersKey,
-              `${stat.userId}:${stat.questionId}`,
-              JSON.stringify(stat),
-            );
-          }
-        }
-      }
+      initialStatsPayload = await this.getMergedAnswers(
+        actualSessionId,
+        session.createdBy?.uid,
+      );
     }
 
     let quizPayload: any = null;
@@ -383,7 +357,6 @@ export class SessionsService {
       redisStatus === SessionStatus.ACTIVE ||
       session.status === SessionStatus.ACTIVE;
 
-    // If the session is already completed, reject join
     if (
       !isSessionActiveOrCompleted &&
       session.status === SessionStatus.COMPLETED
@@ -525,7 +498,10 @@ export class SessionsService {
     );
   }
 
-  async isSessionCreator(sessionIdParam: string, userId: string): Promise<boolean> {
+  async isSessionCreator(
+    sessionIdParam: string,
+    userId: string,
+  ): Promise<boolean> {
     const isUuid = sessionIdParam.length > 10;
     const session = await this.sessionRepo.findOne({
       where: isUuid
@@ -534,5 +510,62 @@ export class SessionsService {
       relations: ['createdBy'],
     });
     return session?.createdBy?.uid === userId;
+  }
+
+  private async getMergedAnswers(sessionId: string, creatorId?: string) {
+    const answersKey = `quiz:session:${sessionId}:answers`;
+    const cachedAnswers = await this.redisService.hgetall(answersKey);
+    const redisStats =
+      cachedAnswers && Object.keys(cachedAnswers).length > 0
+        ? Object.values(cachedAnswers).map((v) => JSON.parse(v))
+        : [];
+
+    const dbAnswers = await this.questionResponseRepo.find({
+      where: { session: { sessionId } },
+      relations: ['user', 'question'],
+    });
+
+    const dbStats = dbAnswers
+      .filter((ans) => ans.user?.uid !== creatorId)
+      .map((ans) => ({
+        questionId: ans.question.questionId,
+        userId: ans.user?.uid,
+        userName:
+          ans.user?.name ||
+          (ans.user?.email ? ans.user.email.split('@')[0] : 'Unknown'),
+        response: ans.response,
+        timeTakenSecs: ans.timeTakenSecs,
+        isCorrect: ans.isCorrect,
+        pointsScored: ans.pointsScored,
+      }));
+
+    const mergedMap = new Map<string, any>();
+
+    // Start with DB answers
+    for (const stat of dbStats) {
+      mergedMap.set(`${stat.userId}:${stat.questionId}`, stat);
+    }
+
+    // Overwrite with Redis answers (live/in-queue takes precedence)
+    for (const stat of redisStats) {
+      if (stat.userId !== creatorId) {
+        mergedMap.set(`${stat.userId}:${stat.questionId}`, stat);
+      }
+    }
+
+    const mergedArray = Array.from(mergedMap.values());
+
+    // Optional cache warm-up for Redis
+    if (mergedArray.length > redisStats.length) {
+      for (const stat of mergedArray) {
+        await this.redisService.hset(
+          answersKey,
+          `${stat.userId}:${stat.questionId}`,
+          JSON.stringify(stat),
+        );
+      }
+    }
+
+    return mergedArray;
   }
 }
