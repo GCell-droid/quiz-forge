@@ -173,7 +173,7 @@ export default function JoinQuizPage() {
             Join Quiz Session
           </CardTitle>
           <CardDescription>
-            Enter the Session ID to join the waiting room
+            Enter the Quiz Code to join the waiting room
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -182,9 +182,9 @@ export default function JoinQuizPage() {
           <form onSubmit={handleJoin} className="space-y-4">
             <Input
               value={joinInput}
-              onChange={(e) => setJoinInput(e.target.value)}
-              placeholder="Enter Session ID..."
-              className="text-center text-lg"
+              onChange={(e) => setJoinInput(e.target.value.toUpperCase())}
+              placeholder="Enter Quiz Code..."
+              className="text-center text-lg uppercase"
               required
             />
             <Button
@@ -194,10 +194,6 @@ export default function JoinQuizPage() {
             >
               {loading ? "Joining..." : "Join"}
             </Button>
-            <p className="text-xs text-muted-foreground text-center mt-2">
-              Note: Until a code lookup endpoint is added, please use
-              the full Session ID.
-            </p>
           </form>
         </CardContent>
       </Card>
