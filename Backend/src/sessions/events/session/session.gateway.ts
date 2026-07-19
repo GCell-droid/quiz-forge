@@ -12,6 +12,7 @@ import { Injectable, UseGuards } from '@nestjs/common';
 import { OnGatewayDisconnect } from '@nestjs/websockets';
 import { WsJwtGuard } from '../../../auth/guards/ws-jwt/ws-jwt.guard';
 import { SessionsService } from '../../sessions.service';
+import { RedisService } from '../../../redis/redis.service';
 
 @WebSocketGateway({
   cors: {
@@ -30,6 +31,7 @@ export class SessionGateway implements OnGatewayDisconnect {
     @InjectQueue('answer-ingestion')
     private readonly answerIngestionQueue: Queue,
     private readonly sessionsService: SessionsService,
+    private readonly redisService: RedisService,
   ) {}
 
   @UseGuards(WsJwtGuard)
@@ -137,7 +139,9 @@ export class SessionGateway implements OnGatewayDisconnect {
         jobId: `answer-${data.sessionId}-${data.questionId}-${actualUserId}`,
       },
     );
-
+    // 2. Instantly track this question as answered in Redis to avoid DB fallback on rejoin
+    const answeredSetKey = `quiz:session:${data.sessionId}:answered:${actualUserId}`;
+    await this.redisService.sadd(answeredSetKey, data.questionId);
 
 
     // 3. Return immediate acknowledgement to client

@@ -41,6 +41,18 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
     return this.redisClient.hgetall(key);
   }
 
+  async exists(key: string): Promise<number> {
+    return this.redisClient.exists(key);
+  }
+
+  async sadd(key: string, ...members: string[]): Promise<number> {
+    return this.redisClient.sadd(key, ...members);
+  }
+
+  async smembers(key: string): Promise<string[]> {
+    return this.redisClient.smembers(key);
+  }
+
   getClient(): Redis {
     return this.redisClient;
   }

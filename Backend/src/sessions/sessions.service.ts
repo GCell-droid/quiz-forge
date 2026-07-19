@@ -298,25 +298,55 @@ export class SessionsService {
     let actualSessionId = sessionIdParam;
     const isUuid = sessionIdParam.length > 10;
 
-    const session = await this.sessionRepo.findOne({
-      where: isUuid
-        ? { sessionId: sessionIdParam }
-        : { joinCode: sessionIdParam },
-      relations: ['quiz', 'createdBy'],
-    });
-
-    if (!session) {
-      return { error: 'Session not found' };
+    if (!isUuid) {
+      const resolvedSessionId = await this.redisService.get(`quiz:session:code:${sessionIdParam}`);
+      if (resolvedSessionId) {
+        actualSessionId = resolvedSessionId;
+      }
     }
 
-    actualSessionId = session.sessionId;
-    let isCreator = userId === session.createdBy?.uid;
+    let sessionDetailsStr = await this.redisService.get(`quiz:session:${actualSessionId}:details`);
+    let sessionDetails: any = null;
+
+    if (sessionDetailsStr) {
+      sessionDetails = JSON.parse(sessionDetailsStr);
+      actualSessionId = sessionDetails.sessionId;
+    } else {
+      // Fallback
+      const session = await this.sessionRepo.findOne({
+        where: isUuid
+          ? { sessionId: sessionIdParam }
+          : { joinCode: sessionIdParam },
+        relations: ['quiz', 'createdBy'],
+      });
+
+      if (!session) {
+        return { error: 'Session not found' };
+      }
+
+      actualSessionId = session.sessionId;
+      sessionDetails = {
+        sessionId: session.sessionId,
+        joinCode: session.joinCode,
+        creatorId: session.createdBy?.uid,
+        status: session.status,
+        timeLimit: session.timeLimit,
+        scheduledStart: session.scheduledStart,
+        actualStart: session.actualStart,
+        endTime: session.endTime,
+        quizId: session.quiz?.quizId,
+      };
+      await this.redisService.set(`quiz:session:${actualSessionId}:details`, JSON.stringify(sessionDetails), 3600);
+      await this.redisService.set(`quiz:session:code:${session.joinCode}`, session.sessionId, 3600);
+    }
+
+    let isCreator = userId === sessionDetails.creatorId;
     let initialStatsPayload: any[] = [];
 
     if (isCreator) {
       initialStatsPayload = await this.getMergedAnswers(
         actualSessionId,
-        session.createdBy?.uid,
+        sessionDetails.creatorId,
       );
     }
 
@@ -324,20 +354,14 @@ export class SessionsService {
     let answeredQuestionIds: string[] = [];
 
     if (!isCreator && userId) {
-      // Check Redis first for instant access, even if BullMQ is delayed
-      const answersKey = `quiz:session:${actualSessionId}:answers`;
-      const cachedAnswers = await this.redisService.hgetall(answersKey);
+      // 1. Fetch instantly from the Redis Set populated by the Gateway
+      const answeredSetKey = `quiz:session:${actualSessionId}:answered:${userId}`;
+      const redisAnswerIds = await this.redisService.smembers(answeredSetKey);
 
-      if (cachedAnswers && Object.keys(cachedAnswers).length > 0) {
-        Object.keys(cachedAnswers).forEach((key) => {
-          if (key.startsWith(`${userId}:`)) {
-            answeredQuestionIds.push(key.split(':')[1]);
-          }
-        });
-      }
-
-      // Fallback to DB if not found in Redis (or just to be safe)
-      if (answeredQuestionIds.length === 0) {
+      if (redisAnswerIds && redisAnswerIds.length > 0) {
+        answeredQuestionIds = redisAnswerIds;
+      } else {
+        // 2. Fallback to DB ONLY if the Redis Set is empty (e.g. cache cleared)
         const dbAnswers = await this.questionResponseRepo.find({
           where: {
             session: { sessionId: actualSessionId },
@@ -345,7 +369,13 @@ export class SessionsService {
           },
           relations: ['question'],
         });
+        
         answeredQuestionIds = dbAnswers.map((ans) => ans.question.questionId);
+
+        // Warm up the cache for next time
+        if (answeredQuestionIds.length > 0) {
+          await this.redisService.sadd(answeredSetKey, ...answeredQuestionIds);
+        }
       }
     }
 
@@ -355,11 +385,11 @@ export class SessionsService {
 
     const isSessionActiveOrCompleted =
       redisStatus === SessionStatus.ACTIVE ||
-      session.status === SessionStatus.ACTIVE;
+      sessionDetails.status === SessionStatus.ACTIVE;
 
     if (
       !isSessionActiveOrCompleted &&
-      session.status === SessionStatus.COMPLETED
+      sessionDetails.status === SessionStatus.COMPLETED
     ) {
       return { error: 'Session has ended' };
     }
@@ -380,9 +410,9 @@ export class SessionsService {
         }
       }
 
-      if (!quiz && session.quiz) {
-        quiz = await this.quizzesService.getQuiz(session.quiz.quizId);
-        if (quiz && session.status !== SessionStatus.COMPLETED) {
+      if (!quiz && sessionDetails.quizId) {
+        quiz = await this.quizzesService.getQuiz(sessionDetails.quizId);
+        if (quiz && sessionDetails.status !== SessionStatus.COMPLETED) {
           await this.redisService.set(
             cacheKey,
             JSON.stringify(quiz),
@@ -392,12 +422,15 @@ export class SessionsService {
       }
 
       if (quiz && quiz.quizQuestions) {
-        let remainingTime = session.timeLimit;
-        if (session.actualStart) {
+        let remainingTime = sessionDetails.timeLimit;
+        if (sessionDetails.actualStart) {
+          const actualStartDate = typeof sessionDetails.actualStart === 'string' 
+            ? new Date(sessionDetails.actualStart) 
+            : sessionDetails.actualStart;
           const elapsedSecs = Math.floor(
-            (Date.now() - session.actualStart.getTime()) / 1000,
+            (Date.now() - actualStartDate.getTime()) / 1000,
           );
-          remainingTime = Math.max(0, session.timeLimit - elapsedSecs);
+          remainingTime = Math.max(0, sessionDetails.timeLimit - elapsedSecs);
         }
 
         let questionsToReturn: any[] = [];
@@ -440,8 +473,8 @@ export class SessionsService {
       success: true,
       data: {
         sessionId: actualSessionId,
-        status: session.status,
-        scheduledStart: session.scheduledStart,
+        status: sessionDetails.status,
+        scheduledStart: sessionDetails.scheduledStart,
         isCreator,
         initialStats: initialStatsPayload,
         answeredQuestionIds,

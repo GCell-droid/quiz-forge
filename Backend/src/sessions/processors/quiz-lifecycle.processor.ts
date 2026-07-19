@@ -27,7 +27,7 @@ export class QuizLifecycleProcessor extends WorkerHost {
     // Fetch the session
     const session = await this.sessionRepo.findOne({
       where: { sessionId },
-      relations: ['quiz'],
+      relations: ['quiz', 'createdBy'],
     });
     
     if (!session) {
@@ -42,6 +42,21 @@ export class QuizLifecycleProcessor extends WorkerHost {
       const cacheKey = `quiz:session:${sessionId}:metadata`;
       await this.redisService.set(cacheKey, JSON.stringify(quiz), 3600);
       
+      // Cache session details
+      const sessionDetails = {
+        sessionId: session.sessionId,
+        joinCode: session.joinCode,
+        creatorId: session.createdBy?.uid,
+        status: SessionStatus.SCHEDULED,
+        timeLimit: session.timeLimit,
+        scheduledStart: session.scheduledStart,
+        actualStart: session.actualStart,
+        endTime: session.endTime,
+        quizId: session.quiz?.quizId,
+      };
+      await this.redisService.set(`quiz:session:${sessionId}:details`, JSON.stringify(sessionDetails), 3600);
+      await this.redisService.set(`quiz:session:code:${session.joinCode}`, session.sessionId, 3600);
+      
       // Also cache status as SCHEDULED for consistency
       await this.redisService.set(`quiz:session:${sessionId}:status`, SessionStatus.SCHEDULED, 3600);
       
@@ -54,6 +69,15 @@ export class QuizLifecycleProcessor extends WorkerHost {
 
       // 2. Update status in Redis
       await this.redisService.set(`quiz:session:${sessionId}:status`, SessionStatus.ACTIVE, 3600);
+      
+      // Update session details in Redis
+      const detailsStr = await this.redisService.get(`quiz:session:${sessionId}:details`);
+      if (detailsStr) {
+        const details = JSON.parse(detailsStr);
+        details.status = SessionStatus.ACTIVE;
+        details.actualStart = session.actualStart;
+        await this.redisService.set(`quiz:session:${sessionId}:details`, JSON.stringify(details), 3600);
+      }
 
       // 3. Broadcast go-live event to students in the websocket room
       // Get cached quiz metadata, or fetch from DB if fallback is needed
@@ -74,6 +98,7 @@ export class QuizLifecycleProcessor extends WorkerHost {
           options: qq.question.options,
           points: qq.question.points,
         })) || [],
+        totalQuestions: quiz.quizQuestions?.length || 0,
         timeLimit: session.timeLimit,
       });
 
@@ -86,6 +111,15 @@ export class QuizLifecycleProcessor extends WorkerHost {
 
       // 2. Remove active status from Redis
       await this.redisService.del(`quiz:session:${sessionId}:status`);
+      
+      // Update session details in Redis
+      const detailsStr = await this.redisService.get(`quiz:session:${sessionId}:details`);
+      if (detailsStr) {
+        const details = JSON.parse(detailsStr);
+        details.status = SessionStatus.COMPLETED;
+        details.endTime = session.endTime;
+        await this.redisService.set(`quiz:session:${sessionId}:details`, JSON.stringify(details), 3600);
+      }
       
       // 3. Inform all clients the session has ended
       this.sessionGateway.broadcastToSession(sessionId, 'session_ended', {
