@@ -30,6 +30,7 @@ export default function LiveQuizPage() {
   const [timeLeft, setTimeLeft] = useState<number>(0);
   const [questionStartTime, setQuestionStartTime] = useState<number>(0);
   const [submitting, setSubmitting] = useState(false);
+  const [selectedOption, setSelectedOption] = useState<string | null>(null);
   const [completed, setCompleted] = useState(false);
   const [participantCount, setParticipantCount] = useState<number>(1);
   const [answeredQuestionIds, setAnsweredQuestionIds] = useState<string[]>([]);
@@ -61,6 +62,14 @@ export default function LiveQuizPage() {
         
         if (response.data?.answeredQuestionIds) {
           setAnsweredQuestionIds(response.data.answeredQuestionIds);
+        }
+
+        // FIX: If the user joins an ALREADY ACTIVE session (e.g. joined late or refreshed),
+        // we must set the quiz data here because they missed the "quiz_started" broadcast!
+        if (response.data?.quizPayload) {
+          setQuizData(response.data.quizPayload);
+          setTimeLeft(response.data.quizPayload.timeLimit);
+          setQuestionStartTime(Date.now());
         }
       }
     });
@@ -125,8 +134,8 @@ export default function LiveQuizPage() {
     }
   }, [completed, isCreator, router, sessionId]);
 
-  const handleAnswer = (selectedOption: string) => {
-    if (!quizData || !user) return;
+  const handleAnswer = () => {
+    if (!quizData || !user || !selectedOption) return;
     
     // For students, the server only sends the current question
     const currentQuestion = quizData.questions[0];
@@ -137,25 +146,24 @@ export default function LiveQuizPage() {
     setSubmitting(true);
     
     const socket = getSocket();
-    socket.emit("submitAnswer", {
+    socket.emit("submitAnswerAndGetNext", {
       sessionId: quizData.sessionId, // Use actual UUID, not potentially the join code from URL
       questionId: currentQuestion.questionId,
       userId: user.uid,
       response: selectedOption,
       timeTakenSecs: timeTaken,
-    }, (ack: any) => {
+    }, (res: any) => {
       setAnsweredQuestionIds(prev => [...prev, currentQuestion.questionId]);
+      setSelectedOption(null);
       
-      socket.emit("requestNextQuestion", { sessionId: quizData.sessionId }, (res: any) => {
-        if (res.success && res.nextQuestion) {
-          setQuizData(prev => prev ? ({ ...prev, questions: [res.nextQuestion] }) : prev);
-          setQuestionStartTime(Date.now());
-          setSubmitting(false);
-        } else {
-          setCompleted(true);
-          setSubmitting(false);
-        }
-      });
+      if (res.success && res.nextQuestion) {
+        setQuizData(prev => prev ? ({ ...prev, questions: [res.nextQuestion] }) : prev);
+        setQuestionStartTime(Date.now());
+        setSubmitting(false);
+      } else {
+        setCompleted(true);
+        setSubmitting(false);
+      }
     });
     
     // Fallback if no ack
@@ -188,7 +196,7 @@ export default function LiveQuizPage() {
   }
 
   if (!quizData) {
-    return <Loading fullPage message="Waiting for quiz data..." />;
+    return <Loading fullPage message="Waiting for the host to start the quiz..." />;
   }
 
   if (completed && isCreator) {
@@ -286,9 +294,9 @@ export default function LiveQuizPage() {
             {currentQuestion.options?.map((opt, i) => (
               <Button
                 key={i}
-                variant="outline"
+                variant={selectedOption === opt ? "default" : "outline"}
                 className="h-auto w-full justify-start whitespace-normal px-6 py-4 text-left text-base"
-                onClick={() => handleAnswer(opt)}
+                onClick={() => setSelectedOption(opt)}
                 disabled={submitting}
               >
                 <span className="mr-4 flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-current text-xs font-semibold">
@@ -297,6 +305,16 @@ export default function LiveQuizPage() {
                 {opt}
               </Button>
             ))}
+          </div>
+          <div className="mt-6 flex justify-end">
+            <Button 
+              size="lg" 
+              onClick={handleAnswer} 
+              disabled={!selectedOption || submitting}
+              className="w-full sm:w-auto"
+            >
+              {submitting ? "Submitting..." : "Submit Answer"}
+            </Button>
           </div>
         </CardContent>
       </Card>
