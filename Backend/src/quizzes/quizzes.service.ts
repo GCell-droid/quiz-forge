@@ -31,9 +31,11 @@ export class QuizzesService {
     if (data.bundleIds && data.bundleIds.length > 0) {
       let currentOrder = 1;
 
+      const bundles = await this.bundlesService.getBundles(data.bundleIds);
+
       for (const bId of data.bundleIds) {
-        const bundle = await this.bundlesService.getBundle(bId);
-        if (bundle.questions && bundle.questions.length > 0) {
+        const bundle = bundles.find(b => b.bundleId === bId);
+        if (bundle && bundle.questions && bundle.questions.length > 0) {
           // Sort by bundle's internal displayOrder to maintain intended order
           const sortedQuestions = bundle.questions.sort((a, b) => a.displayOrder - b.displayOrder);
           
@@ -75,24 +77,24 @@ export class QuizzesService {
 
       const savedQuiz = await queryRunner.manager.save(quiz);
 
-      for (let i = 0; i < rawQuestions.length; i++) {
-        const qData = rawQuestions[i];
-
-        const question = queryRunner.manager.create(Question, {
+      if (rawQuestions.length > 0) {
+        const questionsToSave = rawQuestions.map(qData => queryRunner.manager.create(Question, {
           title: qData.title,
           type: qData.type,
           options: qData.options,
           correctAnswer: qData.correctAnswer,
           points: qData.points ?? 1,
-        });
-        const savedQuestion = await queryRunner.manager.save(question);
+        }));
 
-        const quizQuestion = queryRunner.manager.create(QuizQuestion, {
+        const savedQuestions = await queryRunner.manager.save(questionsToSave);
+
+        const quizQuestionsToSave = savedQuestions.map((savedQuestion, i) => queryRunner.manager.create(QuizQuestion, {
           quiz: savedQuiz,
           question: savedQuestion,
-          displayOrder: qData.displayOrder ?? i + 1,
-        });
-        await queryRunner.manager.save(quizQuestion);
+          displayOrder: rawQuestions[i].displayOrder ?? i + 1,
+        }));
+
+        await queryRunner.manager.save(quizQuestionsToSave);
       }
 
       await queryRunner.commitTransaction();

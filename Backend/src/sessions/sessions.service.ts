@@ -211,29 +211,31 @@ export class SessionsService {
   }
 
   async getMyHistory(userId: string) {
-    const responses = await this.questionResponseRepo.find({
-      where: { user: { uid: userId } },
-      relations: ['session', 'session.quiz'],
-      order: { submittedAt: 'DESC' },
-    });
+    const history = await this.questionResponseRepo
+      .createQueryBuilder('qr')
+      .leftJoin('qr.user', 'user')
+      .leftJoin('qr.session', 'session')
+      .leftJoin('session.quiz', 'quiz')
+      .select([
+        'session.sessionId AS "sessionId"',
+        'quiz.title AS "quizTitle"',
+        'COALESCE(session.actualStart, session.scheduledStart) AS "date"',
+        'SUM(qr.pointsScored) AS "score"'
+      ])
+      .where('user.uid = :userId', { userId })
+      .groupBy('session.sessionId')
+      .addGroupBy('quiz.title')
+      .addGroupBy('session.actualStart')
+      .addGroupBy('session.scheduledStart')
+      .orderBy('"date"', 'DESC')
+      .getRawMany();
 
-    const sessionMap = new Map();
-
-    for (const r of responses) {
-      if (!sessionMap.has(r.session.sessionId)) {
-        sessionMap.set(r.session.sessionId, {
-          sessionId: r.session.sessionId,
-          quizTitle: r.session.quiz.title,
-          date: r.session.actualStart || r.session.scheduledStart,
-          score: 0,
-        });
-      }
-
-      const entry = sessionMap.get(r.session.sessionId);
-      entry.score += r.pointsScored;
-    }
-
-    return Array.from(sessionMap.values());
+    return history.map((h: any) => ({
+      sessionId: h.sessionId,
+      quizTitle: h.quizTitle,
+      date: h.date,
+      score: parseInt(h.score, 10) || 0,
+    }));
   }
 
   async getSessionStats(userId: string, sessionIdParam: string) {
@@ -305,7 +307,11 @@ export class SessionsService {
       }
     }
 
-    let sessionDetailsStr = await this.redisService.get(`quiz:session:${actualSessionId}:details`);
+    const [sessionDetailsStr, redisStatus] = await Promise.all([
+      this.redisService.get(`quiz:session:${actualSessionId}:details`),
+      this.redisService.get(`quiz:session:${actualSessionId}:status`),
+    ]);
+    
     let sessionDetails: any = null;
 
     if (sessionDetailsStr) {
@@ -379,9 +385,7 @@ export class SessionsService {
       }
     }
 
-    const redisStatus = await this.redisService.get(
-      `quiz:session:${actualSessionId}:status`,
-    );
+    // redisStatus is already fetched concurrently above
 
     const isSessionActiveOrCompleted =
       redisStatus === SessionStatus.ACTIVE ||

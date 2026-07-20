@@ -91,6 +91,27 @@ export class BundlesService {
     return bundle;
   }
 
+  async getBundles(bundleIds: string[]) {
+    if (!bundleIds || bundleIds.length === 0) return [];
+    
+    const bundles = await this.bundleRepo
+      .createQueryBuilder('bundle')
+      .where('bundle.bundleId IN (:...bundleIds)', { bundleIds })
+      .leftJoinAndSelect('bundle.questions', 'bundleQuestions')
+      .leftJoinAndSelect('bundleQuestions.question', 'question')
+      .leftJoin('bundle.createdBy', 'createdBy')
+      .addSelect(['createdBy.uid', 'createdBy.name', 'createdBy.email'])
+      .getMany();
+
+    bundles.forEach((bundle) => {
+      if (bundle.questions) {
+        bundle.questions.sort((a, b) => a.displayOrder - b.displayOrder);
+      }
+    });
+
+    return bundles;
+  }
+
   async getAllBundles(userId?: string, searchTags?: string[]) {
     const query = this.bundleRepo
       .createQueryBuilder('bundle')

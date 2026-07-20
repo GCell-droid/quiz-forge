@@ -16,7 +16,10 @@ import { RedisService } from '../../../redis/redis.service';
 
 @WebSocketGateway({
   cors: {
-    origin: [process.env.FRONTEND_URL || 'http://localhost:3000', 'http://localhost:3000'],
+    origin: [
+      process.env.FRONTEND_URL || 'http://localhost:3000',
+      'http://localhost:3000',
+    ],
     credentials: true,
   },
 })
@@ -143,9 +146,60 @@ export class SessionGateway implements OnGatewayDisconnect {
     const answeredSetKey = `quiz:session:${data.sessionId}:answered:${actualUserId}`;
     await this.redisService.sadd(answeredSetKey, data.questionId);
 
-
     // 3. Return immediate acknowledgement to client
     return { success: true, message: 'Answer received' };
+  }
+
+  @UseGuards(WsJwtGuard)
+  @SubscribeMessage('submitAnswerAndGetNext')
+  async handleSubmitAnswerAndGetNext(
+    @ConnectedSocket() client: Socket & { user?: any },
+    @MessageBody()
+    data: {
+      sessionId: string;
+      questionId: string;
+      response: string;
+      timeTakenSecs: number;
+    },
+  ) {
+    const actualUserId = client.user?.userId;
+
+    if (!actualUserId) {
+      return { error: 'Unauthorized' };
+    }
+
+    const teacherRoom = `session_${data.sessionId}_teacher`;
+    if (client.rooms.has(teacherRoom)) {
+      return { error: 'Creators cannot submit answers' };
+    }
+
+    // 1. Instantly push answer to BullMQ queue for async processing
+    await this.answerIngestionQueue.add(
+      'submit-answer',
+      {
+        sessionId: data.sessionId,
+        questionId: data.questionId,
+        userId: actualUserId,
+        response: data.response,
+        timeTakenSecs: data.timeTakenSecs,
+      },
+      {
+        jobId: `answer-${data.sessionId}-${data.questionId}-${actualUserId}`,
+      },
+    );
+    
+    // 2. Instantly track this question as answered in Redis to avoid DB fallback on rejoin
+    const answeredSetKey = `quiz:session:${data.sessionId}:answered:${actualUserId}`;
+    await this.redisService.sadd(answeredSetKey, data.questionId);
+
+    // 3. Immediately fetch the next question
+    const nextQuestion = await this.sessionsService.getNextQuestionForUser(
+      data.sessionId,
+      actualUserId,
+    );
+
+    // 4. Return combined payload
+    return { success: true, message: 'Answer received', nextQuestion };
   }
 
   @SubscribeMessage('requestNextQuestion')
@@ -156,10 +210,6 @@ export class SessionGateway implements OnGatewayDisconnect {
     const actualUserId = client.user?.userId;
     if (!actualUserId) return { error: 'Unauthorized' };
 
-    // Wait a brief moment to ensure the async BullMQ worker has processed 
-    // the previous submitAnswer and written it to Redis before we check for the next question.
-    await new Promise((resolve) => setTimeout(resolve, 400));
-
     const nextQuestion = await this.sessionsService.getNextQuestionForUser(
       data.sessionId,
       actualUserId,
@@ -167,7 +217,6 @@ export class SessionGateway implements OnGatewayDisconnect {
 
     return { success: true, nextQuestion };
   }
-
 
   broadcastToSession(sessionId: string, event: string, data: any) {
     const roomName = `session_${sessionId}`;
