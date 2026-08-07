@@ -1,3 +1,6 @@
+"use client";
+
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import {
   Sparkles,
@@ -8,12 +11,94 @@ import {
   Brain,
   Clock,
   BarChart3,
+  Loader2,
 } from "lucide-react";
+import api from "@/lib/api";
 
 export default function LandingPage() {
+  const [isWaking, setIsWaking] = useState(true);
+  const [isFadingOut, setIsFadingOut] = useState(false);
+  const [dots, setDots] = useState("");
+
+  useEffect(() => {
+    let interval: NodeJS.Timeout;
+    if (isWaking) {
+      interval = setInterval(() => {
+        setDots((prev) => (prev.length >= 3 ? "" : prev + "."));
+      }, 500);
+    }
+    return () => clearInterval(interval);
+  }, [isWaking]);
+
+  useEffect(() => {
+    let isMounted = true;
+    const checkServer = async () => {
+      try {
+        await api.get("/server/heartbeat");
+        if (isMounted) {
+          setIsFadingOut(true);
+          setTimeout(() => {
+            if (isMounted) setIsWaking(false);
+          }, 500);
+        }
+      } catch (err: any) {
+        console.log("Waking server...", err);
+
+        if (err.response) {
+          if (isMounted) {
+            setIsFadingOut(true);
+            setTimeout(() => {
+              if (isMounted) setIsWaking(false);
+            }, 500);
+          }
+        } else {
+          setTimeout(() => {
+            if (isMounted) checkServer();
+          }, 2000);
+        }
+      }
+    };
+    checkServer();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
   return (
-    <div className="min-h-screen bg-background">
-      {/* Header */}
+    <div className="min-h-screen bg-background relative">
+      {/* Loading Overlay */}
+      {isWaking && (
+        <div
+          className={`fixed inset-0 z-[100] flex flex-col items-center justify-center bg-background/95 backdrop-blur-xl transition-opacity duration-500 ${
+            isFadingOut ? "opacity-0" : "opacity-100"
+          }`}
+        >
+          {/* Glowing background orbs */}
+          <div className="pointer-events-none absolute left-1/2 top-1/2 h-[500px] w-[800px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-primary/20 blur-[100px]" />
+
+          <div className="relative flex flex-col items-center gap-8">
+            <div className="relative flex h-32 w-32 items-center justify-center rounded-3xl bg-primary/10 shadow-[0_0_60px_-15px] shadow-primary/50 border border-primary/20 backdrop-blur-md">
+              <Loader2 className="h-12 w-12 animate-spin text-primary" />
+              <div className="absolute inset-0 rounded-3xl border-2 border-primary/20" />
+              <div className="absolute inset-0 rounded-3xl border-2 border-primary border-t-transparent animate-[spin_3s_linear_infinite]" />
+            </div>
+
+            <div className="flex flex-col items-center gap-3 text-center">
+              <h2 className="text-3xl font-bold tracking-tight font-heading text-foreground flex items-center min-w-[280px] justify-center">
+                Waking up Server
+                <span className="inline-block w-8 text-left">
+                  {dots}
+                </span>
+              </h2>
+              <p className="text-base text-muted-foreground animate-pulse max-w-[280px]">
+                Please wait while we prepare the forge for your next
+                quiz.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
       <header className="sticky top-0 z-50 border-b border-border/40 bg-background/80 backdrop-blur-xl">
         <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
           <div className="flex items-center gap-2.5">
@@ -65,9 +150,10 @@ export default function LandingPage() {
             </h1>
 
             <p className="mt-6 text-lg leading-relaxed text-muted-foreground sm:text-xl">
-              Quiz Forge is a real-time quiz platform that lets teachers create,
-              schedule, and host live quiz sessions — with AI-powered question
-              generation and instant leaderboards.
+              Quiz Forge is a real-time quiz platform that lets
+              teachers create, schedule, and host live quiz sessions —
+              with AI-powered question generation and instant
+              leaderboards.
             </p>
 
             <div className="mt-10 flex flex-col items-center gap-4 sm:flex-row sm:justify-center">
@@ -98,8 +184,8 @@ export default function LandingPage() {
               <span className="text-primary">interactive quizzes</span>
             </h2>
             <p className="mt-4 text-muted-foreground">
-              From question banks to real-time sessions — Quiz Forge handles it
-              all.
+              From question banks to real-time sessions — Quiz Forge
+              handles it all.
             </p>
           </div>
 
@@ -141,7 +227,9 @@ export default function LandingPage() {
                 <div
                   className={`mb-4 inline-flex h-11 w-11 items-center justify-center rounded-xl ${feature.bg}`}
                 >
-                  <feature.icon className={`h-5 w-5 ${feature.color}`} />
+                  <feature.icon
+                    className={`h-5 w-5 ${feature.color}`}
+                  />
                 </div>
                 <h3 className="mb-2 text-lg font-semibold font-heading">
                   {feature.title}
@@ -216,8 +304,8 @@ export default function LandingPage() {
             Ready to forge your first quiz?
           </h2>
           <p className="mx-auto mt-4 max-w-xl text-muted-foreground">
-            Join teachers and students already using Quiz Forge to create
-            engaging quiz experiences.
+            Join teachers and students already using Quiz Forge to
+            create engaging quiz experiences.
           </p>
           <Link
             href="/signup"

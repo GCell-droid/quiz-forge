@@ -164,7 +164,11 @@ export class SessionsService {
 
     const preWarmTimeMs = startTimeMs - this.PRE_WARM_OFFSET_MS;
     const delayPreWarm = Math.max(0, preWarmTimeMs - now);
-    const delayGoLive = Math.max(0, startTimeMs - now);
+
+    let delayGoLive = Math.max(0, startTimeMs - now);
+    if (delayGoLive - delayPreWarm < 2000) {
+      delayGoLive = delayPreWarm + 2000;
+    }
 
     await this.quizLifecycleQueue.add(
       'pre-warm',
@@ -220,7 +224,7 @@ export class SessionsService {
         'session.sessionId AS "sessionId"',
         'quiz.title AS "quizTitle"',
         'COALESCE(session.actualStart, session.scheduledStart) AS "date"',
-        'SUM(qr.pointsScored) AS "score"'
+        'SUM(qr.pointsScored) AS "score"',
       ])
       .where('user.uid = :userId', { userId })
       .groupBy('session.sessionId')
@@ -301,7 +305,9 @@ export class SessionsService {
     const isUuid = sessionIdParam.length > 10;
 
     if (!isUuid) {
-      const resolvedSessionId = await this.redisService.get(`quiz:session:code:${sessionIdParam}`);
+      const resolvedSessionId = await this.redisService.get(
+        `quiz:session:code:${sessionIdParam}`,
+      );
       if (resolvedSessionId) {
         actualSessionId = resolvedSessionId;
       }
@@ -311,7 +317,7 @@ export class SessionsService {
       this.redisService.get(`quiz:session:${actualSessionId}:details`),
       this.redisService.get(`quiz:session:${actualSessionId}:status`),
     ]);
-    
+
     let sessionDetails: any = null;
 
     if (sessionDetailsStr) {
@@ -342,8 +348,16 @@ export class SessionsService {
         endTime: session.endTime,
         quizId: session.quiz?.quizId,
       };
-      await this.redisService.set(`quiz:session:${actualSessionId}:details`, JSON.stringify(sessionDetails), 3600);
-      await this.redisService.set(`quiz:session:code:${session.joinCode}`, session.sessionId, 3600);
+      await this.redisService.set(
+        `quiz:session:${actualSessionId}:details`,
+        JSON.stringify(sessionDetails),
+        3600,
+      );
+      await this.redisService.set(
+        `quiz:session:code:${session.joinCode}`,
+        session.sessionId,
+        3600,
+      );
     }
 
     let isCreator = userId === sessionDetails.creatorId;
@@ -375,7 +389,7 @@ export class SessionsService {
           },
           relations: ['question'],
         });
-        
+
         answeredQuestionIds = dbAnswers.map((ans) => ans.question.questionId);
 
         // Warm up the cache for next time
@@ -428,9 +442,10 @@ export class SessionsService {
       if (quiz && quiz.quizQuestions) {
         let remainingTime = sessionDetails.timeLimit;
         if (sessionDetails.actualStart) {
-          const actualStartDate = typeof sessionDetails.actualStart === 'string' 
-            ? new Date(sessionDetails.actualStart) 
-            : sessionDetails.actualStart;
+          const actualStartDate =
+            typeof sessionDetails.actualStart === 'string'
+              ? new Date(sessionDetails.actualStart)
+              : sessionDetails.actualStart;
           const elapsedSecs = Math.floor(
             (Date.now() - actualStartDate.getTime()) / 1000,
           );

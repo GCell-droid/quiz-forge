@@ -11,6 +11,8 @@ import { AnalyticsModule } from './analytics/analytics.module';
 import { UsersModule } from './user/user.module';
 import { RedisModule } from './redis/redis.module';
 import { BullModule } from '@nestjs/bullmq';
+import { AppController } from './app.controller';
+import { AppService } from './app.service';
 
 @Module({
   imports: [
@@ -29,7 +31,7 @@ import { BullModule } from '@nestjs/bullmq';
         rejectUnauthorized: false,
       },
       autoLoadEntities: true,
-      synchronize: true,
+      // synchronize: true,
       // dropSchema: true,
     }),
     ScheduleModule.forRoot(),
@@ -61,5 +63,7 @@ import { BullModule } from '@nestjs/bullmq';
     UsersModule,
     RedisModule,
   ],
+  controllers: [AppController],
+  providers: [AppService],
 })
 export class AppModule {}
