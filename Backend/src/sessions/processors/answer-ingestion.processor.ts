@@ -1,45 +1,37 @@
 import { Processor, WorkerHost } from '@nestjs/bullmq';
 import { Job } from 'bullmq';
-import { Injectable, NotFoundException } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { QuizSession } from '../entities/quiz-session.entity/quiz-session.entity';
-import { Question } from '../../quizzes/entities/question.entity/question.entity';
 import User from '../../common/entity/user.entity';
 import { RedisService } from '../../redis/redis.service';
 import { QuizzesService } from '../../quizzes/quizzes.service';
-import { QuestionResponse } from '../entities/question-response.entity/question-response.entity';
 
-import { SessionGateway } from '../events/session/session.gateway';
-
-interface AnswerPayload {
-  sessionId: string;
-  questionId: string;
-  userId: string;
-  response: string;
-  timeTakenSecs: number;
-}
+import { ANSWER_SCORER } from '../ports/answer-scoring.port';
+import type { AnswerScorer } from '../ports/answer-scoring.port';
+import { AnswerJob } from '../ports/answer-queue.port';
+import { SESSION_EVENTS } from '../ports/session-events.port';
+import type { SessionEvents } from '../ports/session-events.port';
+import { Question } from '../../quizzes/entities/question.entity/question.entity';
+import { SessionRepository } from '../repositories/session.repository';
+import { ResponseRepository } from '../repositories/response.repository';
+import { UserRepository } from '../../common/repositories/user.repository';
 
 @Processor('answer-ingestion')
 @Injectable()
 export class AnswerIngestionProcessor extends WorkerHost {
   constructor(
-    @InjectRepository(QuestionResponse)
-    private readonly responseRepo: Repository<QuestionResponse>,
-    @InjectRepository(QuizSession)
-    private readonly sessionRepo: Repository<QuizSession>,
-    @InjectRepository(Question)
-    private readonly questionRepo: Repository<Question>,
-    @InjectRepository(User)
-    private readonly userRepo: Repository<User>,
+    private readonly responseRepo: ResponseRepository,
+    private readonly sessionRepo: SessionRepository,
+    private readonly userRepo: UserRepository,
     private readonly redisService: RedisService,
     private readonly quizzesService: QuizzesService,
-    private readonly sessionGateway: SessionGateway,
+    @Inject(ANSWER_SCORER) private readonly answerScorer: AnswerScorer,
+    @Inject(SESSION_EVENTS) private readonly sessionEvents: SessionEvents,
   ) {
     super();
   }
 
-  async process(job: Job<AnswerPayload>): Promise<void> {
+  async process(job: Job<AnswerJob>): Promise<void> {
     const { sessionId, questionId, userId, response, timeTakenSecs } = job.data;
 
     // 1. Load Quiz details to verify the correct answer.
@@ -52,10 +44,7 @@ export class AnswerIngestionProcessor extends WorkerHost {
       quiz = JSON.parse(cachedQuizData);
     } else {
       // Fallback: Fetch session and then quiz from DB
-      const session = await this.sessionRepo.findOne({
-        where: { sessionId },
-        relations: ['quiz'],
-      });
+      const session = await this.sessionRepo.findByIdWithQuiz(sessionId);
       if (!session) {
         throw new NotFoundException(`Session ${sessionId} not found`);
       }
@@ -76,8 +65,10 @@ export class AnswerIngestionProcessor extends WorkerHost {
     const question = quizQuestionBridge.question;
 
     // 2. Evaluate answer correctness
-    const isCorrect = this.evaluateAnswer(question, response);
-    const pointsScored = isCorrect ? question.points : 0;
+    const { isCorrect, pointsScored } = this.answerScorer.score(
+      question,
+      response,
+    );
 
     // 3. Save QuestionResponse to database
     const questionResponse = this.responseRepo.create({
@@ -96,7 +87,7 @@ export class AnswerIngestionProcessor extends WorkerHost {
     );
 
     // 4. Fetch User to broadcast userName
-    const user = await this.userRepo.findOne({ where: { uid: userId } });
+    const user = await this.userRepo.findById(userId);
     const userName =
       user?.name || (user?.email ? user.email.split('@')[0] : 'Unknown');
 
@@ -119,31 +110,6 @@ export class AnswerIngestionProcessor extends WorkerHost {
     );
 
     // 6. Broadcast live_answer_submitted event to the room
-    this.sessionGateway.broadcastToSession(
-      sessionId,
-      'live_answer_submitted',
-      answerPayload,
-    );
-  }
-
-  private evaluateAnswer(question: any, response: string): boolean {
-    const correctAnswer = question.correctAnswer;
-
-    if (typeof correctAnswer === 'string') {
-      return (
-        correctAnswer.trim().toLowerCase() === response.trim().toLowerCase()
-      );
-    }
-
-    if (typeof correctAnswer === 'number') {
-      return correctAnswer === Number(response);
-    }
-
-    if (typeof correctAnswer === 'boolean') {
-      return correctAnswer === (response.toLowerCase() === 'true');
-    }
-
-    // Fallback comparison
-    return JSON.stringify(correctAnswer) === JSON.stringify(response);
+    this.sessionEvents.answerSubmitted(sessionId, answerPayload);
   }
 }

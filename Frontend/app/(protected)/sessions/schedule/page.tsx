@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import api from "@/lib/api";
-import { isAxiosError } from "axios";
+import { getApiErrorMessage } from "@/lib/api-error";
 import { Quiz, QuizSession } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -21,8 +21,8 @@ import {
   FieldLabel,
   FieldDescription,
 } from "@/components/ui/field";
-import { Loading } from "@/components/shared/loading";
 import { ErrorMessage } from "@/components/shared/error-message";
+import { PageResult, PaginationControls } from "@/components/shared/pagination-controls";
 import { ArrowLeft, CalendarClock, Copy, Check } from "lucide-react";
 
 export default function ScheduleSessionPage() {
@@ -39,21 +39,26 @@ export default function ScheduleSessionPage() {
   const [session, setSession] = useState<QuizSession | null>(null);
   const [copied, setCopied] = useState(false);
 
-  const [quizzes, setQuizzes] = useState<any[]>([]);
+  const [quizzes, setQuizzes] = useState<Quiz[]>([]);
   const [loadingQuizzes, setLoadingQuizzes] = useState(true);
+  const [quizPage, setQuizPage] = useState(1);
+  const [quizTotalPages, setQuizTotalPages] = useState(0);
+  const [quizTotal, setQuizTotal] = useState(0);
 
   useEffect(() => {
     api
-      .get("/quizzes")
+      .get<PageResult<Quiz>>("/quizzes", { params: { page: quizPage, pageSize: 12 } })
       .then((res) => {
-        setQuizzes(res.data);
-        if (res.data.length > 0 && !prefilledQuizId) {
-          setQuizId(res.data[0].quizId);
+        setQuizzes(res.data.items);
+        setQuizTotal(res.data.total);
+        setQuizTotalPages(res.data.totalPages);
+        if (res.data.items.length > 0 && !prefilledQuizId) {
+          setQuizId((current) => current || res.data.items[0].quizId);
         }
       })
-      .catch((err) => console.error("Failed to load quizzes:", err))
+      .catch((err) => setError(getApiErrorMessage(err, "Failed to load quizzes")))
       .finally(() => setLoadingQuizzes(false));
-  }, [prefilledQuizId]);
+  }, [prefilledQuizId, quizPage]);
 
   const handleSchedule = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -76,7 +81,7 @@ export default function ScheduleSessionPage() {
       setLoading(true);
       setError(null);
 
-      const res = await api.post("/sessions/schedule", {
+      const res = await api.post("/sessions", {
         quizId,
         scheduledStart: new Date(scheduledStart).toISOString(),
         timeLimit,
@@ -84,11 +89,7 @@ export default function ScheduleSessionPage() {
 
       setSession(res.data);
     } catch (err) {
-      if (isAxiosError(err)) {
-        setError(
-          err.response?.data?.message || "Failed to schedule session",
-        );
-      }
+      setError(getApiErrorMessage(err, "Failed to schedule session"));
     } finally {
       setLoading(false);
     }
@@ -229,7 +230,10 @@ export default function ScheduleSessionPage() {
                     <option value="" disabled>
                       Select a quiz...
                     </option>
-                    {quizzes.map((q: any) => (
+                    {quizId && !quizzes.some((q) => q.quizId === quizId) && (
+                      <option value={quizId}>Selected quiz ({quizId})</option>
+                    )}
+                    {quizzes.map((q) => (
                       <option key={q.quizId} value={q.quizId}>
                         {q.title}
                       </option>
@@ -238,7 +242,7 @@ export default function ScheduleSessionPage() {
                 ) : (
                   <div className="flex flex-col gap-2">
                     <p className="text-sm text-muted-foreground">
-                      You haven't created any quizzes yet.
+                      You haven&apos;t created any quizzes yet.
                     </p>
                     <Link href="/quiz/create">
                       <Button
@@ -252,6 +256,7 @@ export default function ScheduleSessionPage() {
                     </Link>
                   </div>
                 )}
+                <PaginationControls page={quizPage} totalPages={quizTotalPages} total={quizTotal} loading={loadingQuizzes} onPageChange={setQuizPage} />
               </Field>
 
               <Field>

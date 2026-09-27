@@ -11,6 +11,7 @@ import {
 import { useRouter } from "next/navigation";
 import api from "@/lib/api";
 import { isAxiosError } from "axios";
+import { getApiErrorMessage } from "@/lib/api-error";
 import { User } from "@/lib/types";
 
 interface AuthContextValue {
@@ -43,13 +44,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       setLoading(true);
       setError(null);
-      const res = await api.get("/user/profile");
+      const res = await api.get("/users/me");
       setUser(res.data);
     } catch (err) {
       if (isAxiosError(err) && err.response?.status === 401) {
         setUser(null);
       } else {
-        setError("Failed to load user profile");
+        setError(getApiErrorMessage(err, "Failed to load user profile"));
       }
     } finally {
       setLoading(false);
@@ -58,7 +59,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logout = useCallback(async () => {
     try {
-      await api.post("/auth/logout");
+      await api.delete("/auth/sessions/current");
     } catch {
       // Ignore logout errors
     } finally {

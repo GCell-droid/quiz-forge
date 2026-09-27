@@ -61,14 +61,15 @@ BULLMQ_REDIS_URL=redis://localhost:6379
 GOOGLE_CLIENT_ID=your_client_id
 GOOGLE_CLIENT_SECRET=your_client_secret
 JWT_SECRET=your_jwt_secret
-JWT_REFRESH_SECRET=your_refresh_secret
+COOKIE_SECRET=your_cookie_signing_secret
+GOOGLE_CALLBACK_URI=http://localhost:7777/v1/auth/google/callback
 
 # AI Integration
-GEMINI_API_KEY=your_gemini_api_key
+GEMINI_KEY=your_gemini_api_key
 
 # Application
 FRONTEND_URL=http://localhost:3000
-PORT=8000
+PORT=7777
 ```
 
 Start the backend development server:
@@ -85,9 +86,13 @@ npm install
 
 Create a `.env` file in the `Frontend` directory:
 ```env
-NEXT_PUBLIC_API_URL=http://localhost:8000
-NEXT_PUBLIC_SOCKET_URL=http://localhost:8000
+NEXT_PUBLIC_BACKEND_URL=/api
 ```
+
+The frontend sends HTTP requests through `/api` to the backend's `/v1` routes.
+Register the `GOOGLE_CALLBACK_URI` value as an authorized redirect URI in Google
+OAuth settings. See [Backend/README.md](Backend/README.md) for the API route map
+and compatibility policy.
 
 Start the frontend development server:
 ```bash

@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import api from "@/lib/api";
-import { isAxiosError } from "axios";
+import { getApiErrorMessage } from "@/lib/api-error";
 import { QuizDifficulty, QuestionType } from "@/lib/enums";
 import { AiQuizQuestion, GeneratedQuiz } from "@/lib/types";
 import { Button } from "@/components/ui/button";
@@ -63,7 +63,7 @@ export default function AIGeneratePage() {
     try {
       setGenerating(true);
       setGenError(null);
-      const res = await api.post("/gemini/generate-quiz", {
+      const res = await api.post("/quiz-generations", {
         topic,
         numQuestions,
         difficulty,
@@ -74,11 +74,7 @@ export default function AIGeneratePage() {
       setQuizTitle(data.title);
       setQuizDescription(data.description);
     } catch (err) {
-      if (isAxiosError(err)) {
-        setGenError(
-          err.response?.data?.message || "Failed to generate quiz",
-        );
-      }
+      setGenError(getApiErrorMessage(err, "Failed to generate quiz"));
     } finally {
       setGenerating(false);
     }
@@ -120,9 +116,7 @@ export default function AIGeneratePage() {
 
       router.push(`/quiz/${res.data.quizId}`);
     } catch (err) {
-      if (isAxiosError(err)) {
-        setSaveError(err.response?.data?.message || "Failed to save quiz");
-      }
+      setSaveError(getApiErrorMessage(err, "Failed to save quiz"));
     } finally {
       setSaving(false);
     }

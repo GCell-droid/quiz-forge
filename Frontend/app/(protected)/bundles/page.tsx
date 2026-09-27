@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import api from "@/lib/api";
-import { isAxiosError } from "axios";
+import { getApiErrorMessage } from "@/lib/api-error";
 import { QuestionBundle } from "@/lib/types";
 import {
   Card,
@@ -16,6 +16,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Loading } from "@/components/shared/loading";
 import { ErrorMessage } from "@/components/shared/error-message";
+import { PageResult, PaginationControls } from "@/components/shared/pagination-controls";
 import {
   FolderPlus,
   FileText,
@@ -28,55 +29,59 @@ export default function BundlesPage() {
   const [bundles, setBundles] = useState<QuestionBundle[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(0);
+  const [total, setTotal] = useState(0);
+  const [publicOnly, setPublicOnly] = useState(false);
 
-  const fetchBundles = async () => {
+  const fetchBundles = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
-      const res = await api.get("/quizzes/bundles");
-      setBundles(res.data);
+      const res = await api.get<PageResult<QuestionBundle>>("/bundles", {
+        params: { page, pageSize: 12, public: publicOnly },
+      });
+      setBundles(res.data.items);
+      setTotal(res.data.total);
+      setTotalPages(res.data.totalPages);
+      if (page > 1 && page > res.data.totalPages) setPage(Math.max(1, res.data.totalPages));
     } catch (err) {
-      if (isAxiosError(err)) {
-        setError(err.response?.data?.message || "Failed to load bundles");
-      }
+      setError(getApiErrorMessage(err, "Failed to load bundles"));
     } finally {
       setLoading(false);
     }
-  };
+  }, [page, publicOnly]);
 
   const deleteBundle = async (bundleId: string) => {
     if (!confirm("Are you sure you want to delete this bundle?")) return;
     try {
-      await api.delete(`/quizzes/bundles/${bundleId}`);
-      setBundles((prev) => prev.filter((b) => b.bundleId !== bundleId));
+      await api.delete(`/bundles/${bundleId}`);
+      await fetchBundles();
     } catch (err) {
-      if (isAxiosError(err)) {
-        setError(err.response?.data?.message || "Failed to delete bundle");
-      }
+      setError(getApiErrorMessage(err, "Failed to delete bundle"));
     }
   };
 
   useEffect(() => {
     fetchBundles();
-  }, []);
+  }, [fetchBundles]);
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
       <div className="mb-8 flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold tracking-tight font-heading">
-            My Bundles
+            {publicOnly ? "Public Bundles" : "My Bundles"}
           </h1>
           <p className="mt-1 text-muted-foreground">
-            Manage your reusable question banks
+            {publicOnly ? "Explore shared question banks" : "Manage your reusable question banks"}
           </p>
         </div>
-        <Link href="/bundles/create">
-          <Button>
-            <FolderPlus className="mr-2 h-4 w-4" />
-            Create Bundle
-          </Button>
-        </Link>
+        <div className="flex gap-2">
+          <Button variant={publicOnly ? "outline" : "default"} onClick={() => { setPage(1); setPublicOnly(false); }}>My Bundles</Button>
+          <Button variant={publicOnly ? "default" : "outline"} onClick={() => { setPage(1); setPublicOnly(true); }}>Public Bundles</Button>
+          <Link href="/bundles/create"><Button><FolderPlus className="mr-2 h-4 w-4" />Create Bundle</Button></Link>
+        </div>
       </div>
 
       {error && <ErrorMessage message={error} className="mb-6" />}
@@ -88,17 +93,17 @@ export default function BundlesPage() {
           <CardContent className="flex flex-col items-center justify-center py-16">
             <FileText className="mb-4 h-12 w-12 text-muted-foreground/40" />
             <h3 className="text-lg font-semibold font-heading">
-              No bundles yet
+              {publicOnly ? "No public bundles" : "No bundles yet"}
             </h3>
             <p className="mt-1 text-sm text-muted-foreground">
-              Create your first question bundle to get started
+              {publicOnly ? "No shared question banks are available" : "Create your first question bundle to get started"}
             </p>
-            <Link href="/bundles/create" className="mt-4">
+            {!publicOnly && <Link href="/bundles/create" className="mt-4">
               <Button>
                 <FolderPlus className="mr-2 h-4 w-4" />
                 Create Bundle
               </Button>
-            </Link>
+            </Link>}
           </CardContent>
         </Card>
       ) : (
@@ -160,23 +165,24 @@ export default function BundlesPage() {
                 <div className="mt-4 flex gap-2">
                   <Link href={`/bundles/${bundle.bundleId}`} className="flex-1">
                     <Button variant="outline" size="sm" className="w-full">
-                      View / Edit
+                      {publicOnly ? "View" : "View / Edit"}
                     </Button>
                   </Link>
-                  <Button
+                  {!publicOnly && <Button
                     variant="ghost"
                     size="sm"
                     onClick={() => deleteBundle(bundle.bundleId)}
                     className="text-muted-foreground hover:text-destructive"
                   >
                     <Trash2 className="h-4 w-4" />
-                  </Button>
+                  </Button>}
                 </div>
               </CardContent>
             </Card>
           ))}
         </div>
       )}
+      <PaginationControls page={page} totalPages={totalPages} total={total} loading={loading} onPageChange={setPage} />
     </div>
   );
 }

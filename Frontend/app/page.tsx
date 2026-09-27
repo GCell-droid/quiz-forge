@@ -34,7 +34,7 @@ export default function LandingPage() {
     let isMounted = true;
     const checkServer = async () => {
       try {
-        await api.get("/server/heartbeat");
+        await api.get("/health");
         if (isMounted) {
           setIsFadingOut(true);
           setTimeout(() => {

@@ -4,8 +4,7 @@ import { AuthService } from './auth.service';
 import googleOauthConfig from './config/google-oauth-config';
 import { ConfigModule } from '@nestjs/config';
 import { GoogleStrategy } from './strategy/google.strategy';
-import { TypeOrmModule } from '@nestjs/typeorm';
-import UserEntity from '../common/entity/user.entity';
+import { UserPersistenceModule } from '../common/repositories/user-persistence.module';
 import { PassportModule } from '@nestjs/passport';
 import { JwtModule } from '@nestjs/jwt';
 import { JwtStrategy } from './strategy/jwt-strategy';
@@ -17,7 +16,7 @@ import { WsJwtGuard } from './guards/ws-jwt/ws-jwt.guard';
 @Module({
   imports: [
     ConfigModule.forFeature(googleOauthConfig),
-    TypeOrmModule.forFeature([UserEntity]),
+    UserPersistenceModule,
     PassportModule,
     JwtModule.register({}),
   ],

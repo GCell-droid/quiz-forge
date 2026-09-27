@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/card";
 import { Loading } from "@/components/shared/loading";
 import { ErrorMessage } from "@/components/shared/error-message";
+import { getApiErrorMessage } from "@/lib/api-error";
 import api from "@/lib/api";
 import {
   ArrowLeft,
@@ -57,13 +58,11 @@ export default function SessionResultsPage() {
     const fetchResults = async () => {
       try {
         const response = await api.get(
-          `/sessions/${sessionId}/my-results`,
+          `/sessions/${sessionId}/results/me`,
         );
         setResults(response.data);
-      } catch (err: any) {
-        setError(
-          err.response?.data?.message || "Failed to load results",
-        );
+      } catch (err: unknown) {
+        setError(getApiErrorMessage(err, "Failed to load results"));
       } finally {
         setLoading(false);
       }

@@ -10,6 +10,7 @@ import { SessionsModule } from './sessions/sessions.module';
 import { AnalyticsModule } from './analytics/analytics.module';
 import { UsersModule } from './user/user.module';
 import { RedisModule } from './redis/redis.module';
+import { DashboardModule } from './dashboard/dashboard.module';
 import { BullModule } from '@nestjs/bullmq';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
@@ -62,6 +63,7 @@ import { AppService } from './app.service';
     AnalyticsModule,
     UsersModule,
     RedisModule,
+    DashboardModule,
   ],
   controllers: [AppController],
   providers: [AppService],

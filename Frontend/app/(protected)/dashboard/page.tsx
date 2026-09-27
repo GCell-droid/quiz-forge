@@ -14,6 +14,8 @@ import { Input } from "@/components/ui/input";
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import api from "@/lib/api";
+import { getApiErrorMessage } from "@/lib/api-error";
+import { ErrorMessage } from "@/components/shared/error-message";
 import {
   FolderPlus,
   FilePlus,
@@ -25,49 +27,63 @@ import {
   Trophy,
 } from "lucide-react";
 
+type DashboardData =
+  | {
+      role: "teacher";
+      bundles: { count: number; recent: { bundleId: string; title: string }[] };
+      quizzes: { count: number; recent: { quizId: string; title: string }[] };
+      sessions: {
+        count: number;
+        recent: { sessionId: string; status: string; scheduledStart: string; quizTitle: string }[];
+      };
+    }
+  | {
+      role: "student";
+      recentResults: { sessionId: string; quizTitle: string; date: string; score: number }[];
+    };
+
+const pendingDashboardRequests = new Map<string, Promise<DashboardData>>();
+
+function loadDashboard(userId: string): Promise<DashboardData> {
+  const pending = pendingDashboardRequests.get(userId);
+  if (pending) return pending;
+
+  const request = api.get<DashboardData>("/dashboard")
+    .then((response) => response.data)
+    .finally(() => pendingDashboardRequests.delete(userId));
+  pendingDashboardRequests.set(userId, request);
+  return request;
+}
+
 export default function DashboardPage() {
   const { user } = useAuth();
   const router = useRouter();
+  const userId = user?.uid;
+  const userRole = user?.role;
   const [joinCode, setJoinCode] = useState("");
-  const [history, setHistory] = useState<any[]>([]);
-  const [loadingHistory, setLoadingHistory] = useState(false);
-  const [teacherBundles, setTeacherBundles] = useState<any[]>([]);
-  const [teacherQuizzes, setTeacherQuizzes] = useState<any[]>([]);
-  const [teacherSessions, setTeacherSessions] = useState<any[]>([]);
-  const [loadingTeacherStats, setLoadingTeacherStats] = useState(false);
+  const [dashboard, setDashboard] = useState<DashboardData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (user) {
-      if (user.role === "teacher") {
-        setLoadingTeacherStats(true);
-        Promise.all([
-          api.get("/quizzes/bundles"),
-          api.get("/quizzes"),
-          api.get("/sessions/hosted")
-        ])
-        .then(([bundlesRes, quizzesRes, sessionsRes]) => {
-          setTeacherBundles(bundlesRes.data);
-          setTeacherQuizzes(quizzesRes.data);
-          setTeacherSessions(sessionsRes.data);
-        })
-        .catch((err) => console.error("Failed to load teacher stats:", err))
-        .finally(() => setLoadingTeacherStats(false));
-      } else {
-        setLoadingHistory(true);
-        api.get("/sessions/history")
-          .then((res) => setHistory(res.data))
-          .catch((err) => console.error("Failed to load history:", err))
-          .finally(() => setLoadingHistory(false));
-      }
-    }
-  }, [user]);
+    if (!userId) return;
+    let active = true;
+    loadDashboard(userId)
+      .then((data) => { if (active) setDashboard(data); })
+      .catch((err) => { if (active) setError(getApiErrorMessage(err, "Failed to load dashboard")); })
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, [userId, userRole]);
 
   if (!user) return null;
 
   const isTeacher = user.role === "teacher";
+  const teacherDashboard = dashboard?.role === "teacher" ? dashboard : null;
+  const history = dashboard?.role === "student" ? dashboard.recentResults : [];
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+      {error && <ErrorMessage message={error} className="mb-6" />}
       {/* Welcome header */}
       <div className="mb-8">
         <h1 className="text-3xl font-bold tracking-tight font-heading">
@@ -162,10 +178,10 @@ export default function DashboardPage() {
                 <BookOpen className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent className="flex-grow flex flex-col">
-                <div className="text-2xl font-bold mb-4">{loadingTeacherStats ? "—" : teacherBundles.length}</div>
-                {teacherBundles.length > 0 ? (
+                <div className="text-2xl font-bold mb-4">{loading ? "—" : teacherDashboard?.bundles.count ?? 0}</div>
+                {(teacherDashboard?.bundles.recent.length ?? 0) > 0 ? (
                   <div className="space-y-2 mb-4 flex-grow">
-                    {teacherBundles.slice(0, 5).map((bundle: any) => (
+                    {teacherDashboard?.bundles.recent.map((bundle) => (
                       <Link href={`/bundles/${bundle.bundleId}`} key={bundle.bundleId} className="flex justify-between items-center text-sm p-2 hover:bg-muted/50 rounded-md transition-colors group">
                         <span className="truncate pr-2 font-medium group-hover:text-primary">{bundle.title}</span>
                       </Link>
@@ -193,10 +209,10 @@ export default function DashboardPage() {
                 <LayoutDashboard className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent className="flex-grow flex flex-col">
-                <div className="text-2xl font-bold mb-4">{loadingTeacherStats ? "—" : teacherQuizzes.length}</div>
-                {teacherQuizzes.length > 0 ? (
+                <div className="text-2xl font-bold mb-4">{loading ? "—" : teacherDashboard?.quizzes.count ?? 0}</div>
+                {(teacherDashboard?.quizzes.recent.length ?? 0) > 0 ? (
                   <div className="space-y-2 mb-4 flex-grow">
-                    {teacherQuizzes.slice(0, 5).map((quiz: any) => (
+                    {teacherDashboard?.quizzes.recent.map((quiz) => (
                       <Link href={`/quiz/${quiz.quizId}`} key={quiz.quizId} className="flex justify-between items-center text-sm p-2 hover:bg-muted/50 rounded-md transition-colors group">
                         <span className="truncate pr-2 font-medium group-hover:text-primary">{quiz.title}</span>
                       </Link>
@@ -224,16 +240,16 @@ export default function DashboardPage() {
                 <Trophy className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent className="flex-grow flex flex-col">
-                <div className="text-2xl font-bold mb-4">{loadingTeacherStats ? "—" : teacherSessions.length}</div>
-                {teacherSessions.length > 0 ? (
+                <div className="text-2xl font-bold mb-4">{loading ? "—" : teacherDashboard?.sessions.count ?? 0}</div>
+                {(teacherDashboard?.sessions.recent.length ?? 0) > 0 ? (
                   <div className="space-y-2 mb-4 flex-grow">
-                    {teacherSessions.slice(0, 5).map((session: any) => (
+                    {teacherDashboard?.sessions.recent.map((session) => (
                       <Link 
                         href={session.status === 'COMPLETED' ? `/sessions/${session.sessionId}` : `/quiz/live/${session.sessionId}`} 
                         key={session.sessionId} 
                         className="flex justify-between items-center text-sm p-2 hover:bg-muted/50 rounded-md transition-colors group"
                       >
-                        <span className="truncate pr-2 font-medium group-hover:text-primary">{session.quiz?.title || 'Session'}</span>
+                        <span className="truncate pr-2 font-medium group-hover:text-primary">{session.quizTitle || 'Session'}</span>
                         <span className="text-xs text-muted-foreground whitespace-nowrap">
                           {new Date(session.scheduledStart).toLocaleDateString()}
                         </span>
@@ -307,14 +323,14 @@ export default function DashboardPage() {
               </CardDescription>
             </CardHeader>
             <CardContent className="flex-1 flex flex-col">
-              {loadingHistory ? (
+              {loading ? (
                 <div className="flex justify-center py-8 flex-1">
                   <div className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" />
                 </div>
               ) : history.length > 0 ? (
                 <>
                   <div className="space-y-4 pt-2 mb-4 flex-1">
-                    {history.slice(0, 5).map((item) => (
+                    {history.map((item) => (
                       <Link 
                         key={item.sessionId} 
                         href={`/sessions/${item.sessionId}/results`}

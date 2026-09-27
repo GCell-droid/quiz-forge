@@ -1,10 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import api from "@/lib/api";
-import { isAxiosError } from "axios";
-import { QuizSession } from "@/lib/types";
+import { getApiErrorMessage } from "@/lib/api-error";
+import { PageResult, PaginationControls } from "@/components/shared/pagination-controls";
 import { useAuth } from "@/components/auth/auth-context";
 import {
   Card,
@@ -25,44 +25,60 @@ import {
   Play
 } from "lucide-react";
 
+type SessionListItem = {
+  sessionId: string;
+  quiz?: { title: string };
+  quizTitle?: string;
+  joinCode?: string;
+  status?: string;
+  scheduledStart?: string;
+  date?: string;
+  score?: number;
+};
+
 export default function SessionsPage() {
   const { user } = useAuth();
-  const [sessions, setSessions] = useState<any[]>([]);
+  const [sessions, setSessions] = useState<SessionListItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(0);
+  const [total, setTotal] = useState(0);
+  const userId = user?.uid;
+  const role = user?.role;
 
-  const fetchSessions = async () => {
-    if (!user) return;
+  const fetchSessions = useCallback(async () => {
+    if (!userId) return;
     try {
       setLoading(true);
       setError(null);
-      const endpoint = user.role === "teacher" ? "/sessions/hosted" : "/sessions/history";
-      const res = await api.get(endpoint);
-      setSessions(res.data);
+      const res = await api.get<PageResult<SessionListItem>>("/sessions", {
+        params: { view: role === "teacher" ? "hosted" : "history", page, pageSize: 12 },
+      });
+      setSessions(res.data.items);
+      setTotal(res.data.total);
+      setTotalPages(res.data.totalPages);
+      if (page > 1 && page > res.data.totalPages) setPage(Math.max(1, res.data.totalPages));
     } catch (err) {
-      if (isAxiosError(err)) {
-        setError(err.response?.data?.message || "Failed to load sessions");
-      }
+      setError(getApiErrorMessage(err, "Failed to load sessions"));
     } finally {
       setLoading(false);
     }
-  };
+  }, [userId, role, page]);
 
   const deleteSession = async (sessionId: string) => {
     if (!confirm("Are you sure you want to delete this session?")) return;
     try {
       await api.delete(`/sessions/${sessionId}`);
-      setSessions((prev) => prev.filter((s) => s.sessionId !== sessionId));
+      await fetchSessions();
     } catch (err) {
-      if (isAxiosError(err)) {
-        setError(err.response?.data?.message || "Failed to delete session");
-      }
+      setError(getApiErrorMessage(err, "Failed to delete session"));
     }
   };
 
   useEffect(() => {
     fetchSessions();
-  }, [user]);
+  }, [fetchSessions]);
 
   if (!user) return null;
 
@@ -157,10 +173,10 @@ export default function SessionsPage() {
                   {isTeacher ? (
                     <>
                       <span>
-                        {new Date(session.scheduledStart).toLocaleDateString()}
+                        {new Date(session.scheduledStart ?? "").toLocaleDateString()}
                       </span>
                       <span>
-                        {new Date(session.scheduledStart).toLocaleTimeString([], {
+                        {new Date(session.scheduledStart ?? "").toLocaleTimeString([], {
                           hour: '2-digit',
                           minute: '2-digit'
                         })}
@@ -169,7 +185,7 @@ export default function SessionsPage() {
                   ) : (
                     <>
                       <span>
-                        {new Date(session.date).toLocaleDateString()}
+                        {new Date(session.date ?? "").toLocaleDateString()}
                       </span>
                       <div className="flex items-center gap-1 font-semibold text-foreground">
                         <Trophy className="h-4 w-4 text-primary" />
@@ -216,6 +232,7 @@ export default function SessionsPage() {
           ))}
         </div>
       )}
+      <PaginationControls page={page} totalPages={totalPages} total={total} loading={loading} onPageChange={setPage} />
     </div>
   );
 }

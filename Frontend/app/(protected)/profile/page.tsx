@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useAuth } from "@/components/auth/auth-context";
-import { isAxiosError } from "axios";
+import { getApiErrorMessage } from "@/lib/api-error";
 import api from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -43,16 +43,12 @@ export default function ProfilePage() {
     setProfileSuccess(false);
 
     try {
-      await api.put("/user/profile", { name });
+      await api.patch("/users/me", { name });
       await refresh();
       setProfileSuccess(true);
       setTimeout(() => setProfileSuccess(false), 3000);
     } catch (err) {
-      if (isAxiosError(err)) {
-        setProfileError(err.response?.data?.message || "Failed to update profile");
-      } else {
-        setProfileError("An unexpected error occurred");
-      }
+      setProfileError(getApiErrorMessage(err, "Failed to update profile"));
     } finally {
       setProfileLoading(false);
     }
@@ -75,18 +71,14 @@ export default function ProfilePage() {
     setPasswordSuccess(false);
 
     try {
-      await api.put("/user/password", { currentPassword, newPassword });
+      await api.put("/users/me/password", { currentPassword, newPassword });
       setPasswordSuccess(true);
       setCurrentPassword("");
       setNewPassword("");
       setConfirmPassword("");
       setTimeout(() => setPasswordSuccess(false), 3000);
     } catch (err) {
-      if (isAxiosError(err)) {
-        setPasswordError(err.response?.data?.message || "Failed to update password");
-      } else {
-        setPasswordError("An unexpected error occurred");
-      }
+      setPasswordError(getApiErrorMessage(err, "Failed to update password"));
     } finally {
       setPasswordLoading(false);
     }

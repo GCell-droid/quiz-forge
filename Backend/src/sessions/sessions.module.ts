@@ -11,10 +11,18 @@ import { QuizzesModule } from '../quizzes/quizzes.module';
 import { QuizLifecycleProcessor } from './processors/quiz-lifecycle.processor';
 import { AnswerIngestionProcessor } from './processors/answer-ingestion.processor';
 import { Question } from '../quizzes/entities/question.entity/question.entity';
-import User from '../common/entity/user.entity';
 
 import { AuthModule } from '../auth/auth.module';
 import { QuestionResponse } from './entities/question-response.entity/question-response.entity';
+import { AnswerSubmissionService } from './answer-submission.service';
+import { BullAnswerQueue } from './queue/bull-answer.queue';
+import { DefaultAnswerScorer } from './scoring/default-answer.scorer';
+import { ANSWER_QUEUE } from './ports/answer-queue.port';
+import { ANSWER_SCORER } from './ports/answer-scoring.port';
+import { SESSION_EVENTS } from './ports/session-events.port';
+import { SessionRepository } from './repositories/session.repository';
+import { ResponseRepository } from './repositories/response.repository';
+import { UserPersistenceModule } from '../common/repositories/user-persistence.module';
 
 @Module({
   imports: [
@@ -24,7 +32,6 @@ import { QuestionResponse } from './entities/question-response.entity/question-r
       QuizInvite,
       Question,
       QuestionResponse,
-      User,
     ]),
     BullModule.registerQueue(
       { name: 'quiz-lifecycle' },
@@ -32,11 +39,20 @@ import { QuestionResponse } from './entities/question-response.entity/question-r
     ),
     QuizzesModule,
     AuthModule,
+    UserPersistenceModule,
   ],
   controllers: [SessionsController],
   providers: [
     SessionsService,
+    SessionRepository,
+    ResponseRepository,
+    AnswerSubmissionService,
     SessionGateway,
+    BullAnswerQueue,
+    DefaultAnswerScorer,
+    { provide: ANSWER_QUEUE, useExisting: BullAnswerQueue },
+    { provide: ANSWER_SCORER, useExisting: DefaultAnswerScorer },
+    { provide: SESSION_EVENTS, useExisting: SessionGateway },
     QuizLifecycleProcessor,
     AnswerIngestionProcessor,
   ],

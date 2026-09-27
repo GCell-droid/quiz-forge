@@ -5,6 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import { TeacherStatsView } from "@/components/session/teacher-stats-view";
 import { Loading } from "@/components/shared/loading";
 import { ErrorMessage } from "@/components/shared/error-message";
+import { getApiErrorMessage } from "@/lib/api-error";
 import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
 import api from "@/lib/api";
@@ -27,8 +28,8 @@ export default function SessionDetailsPage() {
         } else {
           setError("Failed to load session data");
         }
-      } catch (err: any) {
-        setError(err.response?.data?.message || "Failed to load session details");
+      } catch (err: unknown) {
+        setError(getApiErrorMessage(err, "Failed to load session details"));
       } finally {
         setLoading(false);
       }

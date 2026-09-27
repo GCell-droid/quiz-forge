@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import api from "@/lib/api";
-import { isAxiosError } from "axios";
+import { getApiErrorMessage } from "@/lib/api-error";
 import { QuestionBundle, CreateQuestionDto } from "@/lib/types";
 import { QuestionType } from "@/lib/enums";
 import { Button } from "@/components/ui/button";
@@ -67,15 +67,13 @@ export default function BundleDetailPage() {
   const fetchBundle = async () => {
     try {
       setLoading(true);
-      const res = await api.get(`/quizzes/bundles/${bundleId}`);
+      const res = await api.get(`/bundles/${bundleId}`);
       setBundle(res.data);
       setTitle(res.data.title);
       setDescription(res.data.description || "");
       setTags(res.data.tags || []);
     } catch (err) {
-      if (isAxiosError(err)) {
-        setError(err.response?.data?.message || "Failed to load bundle");
-      }
+      setError(getApiErrorMessage(err, "Failed to load bundle"));
     } finally {
       setLoading(false);
     }
@@ -85,16 +83,14 @@ export default function BundleDetailPage() {
     try {
       setSaving(true);
       setError(null);
-      await api.patch(`/quizzes/bundles/${bundleId}`, {
+      await api.patch(`/bundles/${bundleId}`, {
         title,
         description: description || undefined,
         tags,
       });
       await fetchBundle();
     } catch (err) {
-      if (isAxiosError(err)) {
-        setError(err.response?.data?.message || "Failed to update bundle");
-      }
+      setError(getApiErrorMessage(err, "Failed to update bundle"));
     } finally {
       setSaving(false);
     }
@@ -104,7 +100,7 @@ export default function BundleDetailPage() {
     try {
       setSaving(true);
       setError(null);
-      await api.post(`/quizzes/bundles/${bundleId}/questions`, {
+      await api.post(`/bundles/${bundleId}/questions`, {
         ...newQuestion,
         displayOrder: (bundle?.questions?.length || 0) + 1,
       });
@@ -119,9 +115,7 @@ export default function BundleDetailPage() {
       });
       await fetchBundle();
     } catch (err) {
-      if (isAxiosError(err)) {
-        setError(err.response?.data?.message || "Failed to add question");
-      }
+      setError(getApiErrorMessage(err, "Failed to add question"));
     } finally {
       setSaving(false);
     }
@@ -130,12 +124,10 @@ export default function BundleDetailPage() {
   const deleteQuestion = async (bridgeId: string) => {
     if (!confirm("Delete this question?")) return;
     try {
-      await api.delete(`/quizzes/bundles/questions/${bridgeId}`);
+      await api.delete(`/bundles/questions/${bridgeId}`);
       await fetchBundle();
     } catch (err) {
-      if (isAxiosError(err)) {
-        setError(err.response?.data?.message || "Failed to delete question");
-      }
+      setError(getApiErrorMessage(err, "Failed to delete question"));
     }
   };
 
@@ -144,14 +136,12 @@ export default function BundleDetailPage() {
     try {
       setSaving(true);
       setError(null);
-      await api.patch(`/quizzes/bundles/questions/${bridgeId}`, editForm);
+      await api.patch(`/bundles/questions/${bridgeId}`, editForm);
       setEditingQuestionId(null);
       setEditForm(null);
       await fetchBundle();
     } catch (err) {
-      if (isAxiosError(err)) {
-        setError(err.response?.data?.message || "Failed to update question");
-      }
+      setError(getApiErrorMessage(err, "Failed to update question"));
     } finally {
       setSaving(false);
     }

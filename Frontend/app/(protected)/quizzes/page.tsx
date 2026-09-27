@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import api from "@/lib/api";
-import { isAxiosError } from "axios";
+import { getApiErrorMessage } from "@/lib/api-error";
 import { Quiz } from "@/lib/types";
 import {
   Card,
@@ -16,6 +16,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Loading } from "@/components/shared/loading";
 import { ErrorMessage } from "@/components/shared/error-message";
+import { PageResult, PaginationControls } from "@/components/shared/pagination-controls";
 import {
   FilePlus,
   FileText,
@@ -28,37 +29,39 @@ export default function QuizzesPage() {
   const [quizzes, setQuizzes] = useState<Quiz[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(0);
+  const [total, setTotal] = useState(0);
 
-  const fetchQuizzes = async () => {
+  const fetchQuizzes = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
-      const res = await api.get("/quizzes");
-      setQuizzes(res.data);
+      const res = await api.get<PageResult<Quiz>>("/quizzes", { params: { page, pageSize: 12 } });
+      setQuizzes(res.data.items);
+      setTotal(res.data.total);
+      setTotalPages(res.data.totalPages);
+      if (page > 1 && page > res.data.totalPages) setPage(Math.max(1, res.data.totalPages));
     } catch (err) {
-      if (isAxiosError(err)) {
-        setError(err.response?.data?.message || "Failed to load quizzes");
-      }
+      setError(getApiErrorMessage(err, "Failed to load quizzes"));
     } finally {
       setLoading(false);
     }
-  };
+  }, [page]);
 
   const deleteQuiz = async (quizId: string) => {
     if (!confirm("Are you sure you want to delete this quiz?")) return;
     try {
       await api.delete(`/quizzes/${quizId}`);
-      setQuizzes((prev) => prev.filter((q) => q.quizId !== quizId));
+      await fetchQuizzes();
     } catch (err) {
-      if (isAxiosError(err)) {
-        setError(err.response?.data?.message || "Failed to delete quiz");
-      }
+      setError(getApiErrorMessage(err, "Failed to delete quiz"));
     }
   };
 
   useEffect(() => {
     fetchQuizzes();
-  }, []);
+  }, [fetchQuizzes]);
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
@@ -178,6 +181,7 @@ export default function QuizzesPage() {
           ))}
         </div>
       )}
+      <PaginationControls page={page} totalPages={totalPages} total={total} loading={loading} onPageChange={setPage} />
     </div>
   );
 }

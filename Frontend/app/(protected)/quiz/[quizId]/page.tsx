@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import api from "@/lib/api";
-import { isAxiosError } from "axios";
+import { getApiErrorMessage } from "@/lib/api-error";
 import { Quiz, CreateQuestionDto } from "@/lib/types";
 import { QuestionType } from "@/lib/enums";
 import { Button } from "@/components/ui/button";
@@ -61,9 +61,7 @@ export default function QuizDetailPage() {
       setDescription(res.data.description || "");
       setTags(res.data.tags || []);
     } catch (err) {
-      if (isAxiosError(err)) {
-        setError(err.response?.data?.message || "Failed to load quiz");
-      }
+      setError(getApiErrorMessage(err, "Failed to load quiz"));
     } finally {
       setLoading(false);
     }
@@ -80,9 +78,7 @@ export default function QuizDetailPage() {
       });
       await fetchQuiz();
     } catch (err) {
-      if (isAxiosError(err)) {
-        setError(err.response?.data?.message || "Failed to update quiz");
-      }
+      setError(getApiErrorMessage(err, "Failed to update quiz"));
     } finally {
       setSaving(false);
     }
@@ -94,9 +90,7 @@ export default function QuizDetailPage() {
       await api.delete(`/quizzes/${quizId}`);
       router.push("/dashboard");
     } catch (err) {
-      if (isAxiosError(err)) {
-        setError(err.response?.data?.message || "Failed to delete quiz");
-      }
+      setError(getApiErrorMessage(err, "Failed to delete quiz"));
     }
   };
 
@@ -106,9 +100,7 @@ export default function QuizDetailPage() {
       await api.delete(`/quizzes/questions/${bridgeId}`);
       await fetchQuiz();
     } catch (err) {
-      if (isAxiosError(err)) {
-        setError(err.response?.data?.message || "Failed to delete question");
-      }
+      setError(getApiErrorMessage(err, "Failed to delete question"));
     }
   };
 
@@ -122,9 +114,7 @@ export default function QuizDetailPage() {
       setEditForm(null);
       await fetchQuiz();
     } catch (err) {
-      if (isAxiosError(err)) {
-        setError(err.response?.data?.message || "Failed to update question");
-      }
+      setError(getApiErrorMessage(err, "Failed to update question"));
     } finally {
       setSaving(false);
     }

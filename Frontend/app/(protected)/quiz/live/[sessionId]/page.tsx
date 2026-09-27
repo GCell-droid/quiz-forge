@@ -16,6 +16,7 @@ import { Badge } from "@/components/ui/badge";
 import { Trophy, CheckCircle, Clock, Users } from "lucide-react";
 import { Loading } from "@/components/shared/loading";
 import { TeacherLiveStats } from "@/components/session/teacher-live-stats";
+import { getSocketErrorMessage } from "@/lib/api-error";
 
 export default function LiveQuizPage() {
   const { sessionId } = useParams();
@@ -46,11 +47,12 @@ export default function LiveQuizPage() {
     // Always emit joinSession to ensure we get the quiz_started payload
     // if the quiz is already active (the backend will instantly emit it back).
     socket.emit("joinSession", { sessionId }, (response: any) => {
-      if (response && response.error) {
-        if (response.error === 'Session has ended') {
+      if (response?.success === false) {
+        const message = getSocketErrorMessage(response, "Unable to join session");
+        if (message === 'Session has ended') {
           setCompleted(true);
         } else {
-          setJoinError(response.error);
+          setJoinError(message);
         }
       } else if (response && response.success) {
         if (response.data?.isCreator) {
@@ -153,6 +155,11 @@ export default function LiveQuizPage() {
       response: selectedOption,
       timeTakenSecs: timeTaken,
     }, (res: any) => {
+      if (res?.success === false) {
+        setJoinError(getSocketErrorMessage(res, "Unable to submit answer"));
+        setSubmitting(false);
+        return;
+      }
       setAnsweredQuestionIds(prev => [...prev, currentQuestion.questionId]);
       setSelectedOption(null);
       

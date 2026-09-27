@@ -1,8 +1,8 @@
 import axios from "axios";
-import { BACKEND_URL } from "@/lib/env";
+import { API_V1_URL } from "@/lib/env";
 
 const api = axios.create({
-  baseURL: BACKEND_URL,
+  baseURL: API_V1_URL,
   withCredentials: true,
   headers: { "Content-Type": "application/json" },
 });
@@ -31,8 +31,8 @@ api.interceptors.response.use(
     if (error.response?.status === 401 && !originalRequest._retry) {
       // Don't intercept calls that are explicitly trying to refresh or login
       if (
-        originalRequest.url === "/auth/refresh" ||
-        originalRequest.url === "/auth/login"
+        originalRequest.url === "/auth/tokens" ||
+        originalRequest.url === "/auth/sessions"
       ) {
         return Promise.reject(error);
       }
@@ -53,7 +53,7 @@ api.interceptors.response.use(
       isRefreshing = true;
 
       try {
-        await api.post("/auth/refresh");
+        await api.post("/auth/tokens");
         processQueue(null);
         return api(originalRequest);
       } catch (err) {

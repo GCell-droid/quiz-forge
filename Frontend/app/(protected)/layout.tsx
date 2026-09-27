@@ -4,12 +4,17 @@ import { AuthProvider, useAuth } from "@/components/auth/auth-context";
 import { Navbar } from "@/components/shared/navbar";
 import { Footer } from "@/components/shared/footer";
 import { Loading } from "@/components/shared/loading";
+import { ErrorMessage } from "@/components/shared/error-message";
 
 function ProtectedContent({ children }: { children: React.ReactNode }) {
-  const { loading } = useAuth();
+  const { loading, error } = useAuth();
 
   if (loading) {
     return <Loading fullPage message="Loading your dashboard..." />;
+  }
+
+  if (error) {
+    return <div className="mx-auto max-w-lg p-8"><ErrorMessage message={error} /></div>;
   }
 
   return (

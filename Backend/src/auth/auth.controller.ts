@@ -3,6 +3,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Patch,
   Post,
@@ -16,8 +17,6 @@ import { RegisterDTO } from './dto/register.dto';
 import type { Request, Response } from 'express';
 import { jwtAuthGuard } from './guards/jwtguard/jwt-auth.guard';
 import { ConfigService } from '@nestjs/config';
-import { Roles } from './decorators/roles.decorator';
-import { RoleGuard } from './guards/roles-guard/roles.guard';
 import { UserRole } from 'src/common/enums/enum';
 import { AuthGuard } from '@nestjs/passport';
 import LoginDto from './dto/login.dto';
@@ -28,13 +27,6 @@ export class AuthController {
     private readonly authService: AuthService,
     private readonly configService: ConfigService,
   ) {}
-
-  @Roles(UserRole.TEACHER)
-  @UseGuards(jwtAuthGuard, RoleGuard)
-  @Get('/test')
-  serverTest() {
-    return 'Server Running ';
-  }
 
   @UseGuards(AuthGuard('google'))
   @Get('/google')
@@ -57,7 +49,7 @@ export class AuthController {
     return res.redirect(`${frontendUrl}/dashboard`);
   }
 
-  @Post('/login')
+  @Post('sessions')
   login(
     @Body() logindto: LoginDto,
     @Req() request: Request,
@@ -66,7 +58,7 @@ export class AuthController {
     return this.authService.login(logindto, request, response);
   }
 
-  @Post('/register')
+  @Post('accounts')
   register(
     @Body() registerdto: RegisterDTO,
     @Res({ passthrough: true }) res: Response,
@@ -75,13 +67,13 @@ export class AuthController {
   }
 
   @UseGuards(jwtAuthGuard)
-  @Post('/logout')
+  @Delete('sessions/current')
   logout(@Res({ passthrough: true }) res: Response) {
     this.authService.logout(res);
     return { message: 'Logged out successfully' };
   }
 
-  @Post('/refresh')
+  @Post('tokens')
   async refresh(
     @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
@@ -95,13 +87,13 @@ export class AuthController {
   }
 
   @UseGuards(jwtAuthGuard)
-  @Get('/me')
+  @Get('sessions/current')
   me(@Res({ passthrough: true }) res: Response) {
     return { message: 'You are logged In' };
   }
 
   @UseGuards(jwtAuthGuard)
-  @Patch('/role')
+  @Patch('accounts/me/role')
   updateRole(
     @Body('role') role: UserRole,
     @Req() req: Request,

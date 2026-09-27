@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import api from "@/lib/api";
-import { isAxiosError } from "axios";
+import { getApiErrorMessage } from "@/lib/api-error";
 import { BundleVisibility, QuestionType } from "@/lib/enums";
 import { CreateQuestionDto } from "@/lib/types";
 import { Button } from "@/components/ui/button";
@@ -63,7 +63,7 @@ export default function CreateBundlePage() {
 
       const filteredQuestions = questions.filter((q) => q.title.trim() !== "");
 
-      await api.post("/quizzes/bundles", {
+      await api.post("/bundles", {
         title,
         description: description || undefined,
         visibility,
@@ -73,9 +73,7 @@ export default function CreateBundlePage() {
 
       router.push("/bundles");
     } catch (err) {
-      if (isAxiosError(err)) {
-        setError(err.response?.data?.message || "Failed to create bundle");
-      }
+      setError(getApiErrorMessage(err, "Failed to create bundle"));
     } finally {
       setLoading(false);
     }

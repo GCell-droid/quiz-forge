@@ -7,14 +7,10 @@ import {
   Param,
   Delete,
   UseGuards,
-  Req,
+  Query,
 } from '@nestjs/common';
+import { parsePage } from '../common/pagination';
 import { QuizzesService } from './quizzes.service';
-import { BundlesService } from './bundles.service';
-import {
-  CreateQuestionBundleDto,
-  UpdateQuestionBundleDto,
-} from './dto/bundle.dto';
 import { CreateQuizDto, UpdateQuizDto } from './dto/quiz.dto';
 import { CreateQuestionDto, UpdateQuestionDto } from './dto/question.dto';
 import { jwtAuthGuard } from '../auth/guards/jwtguard/jwt-auth.guard';
@@ -27,78 +23,7 @@ import { CurrentUser } from '../auth/decorators/currentUser.decorator';
 @UseGuards(jwtAuthGuard, RoleGuard)
 @Roles(UserRole.TEACHER)
 export class QuizzesController {
-  constructor(
-    private readonly quizzesService: QuizzesService,
-    private readonly bundlesService: BundlesService,
-  ) {}
-
-  // --- QUESTION BUNDLE ENDPOINTS ---
-
-  @Post('bundles')
-  createBundle(
-    @CurrentUser() user: any,
-    @Body() data: CreateQuestionBundleDto,
-  ) {
-    return this.bundlesService.createBundle(user.userId, data);
-  }
-
-  @Get('bundles')
-  getAllBundles(@CurrentUser() user: any, @Req() req: any) {
-    // Read ?tags=js,react from query params if available
-    let tags: string[] = [];
-    if (req.query.tags) {
-      tags = req.query.tags.split(',').map((t: string) => t.trim());
-    }
-
-    const isPublicSearch = req.query.public === 'true';
-
-    return this.bundlesService.getAllBundles(
-      isPublicSearch ? undefined : user.userId,
-      tags,
-    );
-  }
-
-  @Get('bundles/:bundleId')
-  getBundle(@Param('bundleId') bundleId: string) {
-    return this.bundlesService.getBundle(bundleId);
-  }
-
-  @Patch('bundles/:bundleId')
-  updateBundle(
-    @CurrentUser() user: any,
-    @Param('bundleId') bundleId: string,
-    @Body() data: UpdateQuestionBundleDto,
-  ) {
-    return this.bundlesService.updateBundle(user.userId, bundleId, data);
-  }
-
-  @Delete('bundles/:bundleId')
-  deleteBundle(@CurrentUser() user: any, @Param('bundleId') bundleId: string) {
-    return this.bundlesService.deleteBundle(user.userId, bundleId);
-  }
-
-  @Post('bundles/:bundleId/questions')
-  addQuestionToBundle(
-    @CurrentUser() user: any,
-    @Param('bundleId') bundleId: string,
-    @Body() data: CreateQuestionDto,
-  ) {
-    return this.bundlesService.addQuestionToBundle(user.userId, bundleId, data);
-  }
-
-  @Patch('bundles/questions/:questionId')
-  updateBundleQuestion(
-    @CurrentUser() user: any,
-    @Param('questionId') questionId: string,
-    @Body() data: UpdateQuestionDto,
-  ) {
-    return this.bundlesService.updateBundleQuestion(user.userId, questionId, data);
-  }
-
-  @Delete('bundles/questions/:questionId')
-  deleteBundleQuestion(@CurrentUser() user: any, @Param('questionId') questionId: string) {
-    return this.bundlesService.deleteBundleQuestion(user.userId, questionId);
-  }
+  constructor(private readonly quizzesService: QuizzesService) {}
 
   // --- QUIZ ENDPOINTS ---
 
@@ -108,9 +33,15 @@ export class QuizzesController {
   }
 
   @Get()
-  getAllQuizzes(@CurrentUser() user: any, @Req() req: any) {
-    const isPublicSearch = req.query.public === 'true';
+  getAllQuizzes(
+    @CurrentUser() user: { userId: string },
+    @Query('public') publicOnly?: string,
+    @Query('page') page?: string,
+    @Query('pageSize') pageSize?: string,
+  ) {
+    const isPublicSearch = publicOnly === 'true';
     return this.quizzesService.getAllQuizzes(
+      parsePage(page, pageSize),
       isPublicSearch ? undefined : user.userId,
     );
   }
@@ -153,7 +84,10 @@ export class QuizzesController {
   }
 
   @Delete('questions/:bridgeId')
-  deleteQuizQuestion(@CurrentUser() user: any, @Param('bridgeId') bridgeId: string) {
+  deleteQuizQuestion(
+    @CurrentUser() user: any,
+    @Param('bridgeId') bridgeId: string,
+  ) {
     return this.quizzesService.deleteQuizQuestion(user.userId, bridgeId);
   }
 }

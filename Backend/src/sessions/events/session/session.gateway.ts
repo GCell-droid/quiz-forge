@@ -6,13 +6,17 @@ import {
   ConnectedSocket,
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
-import { InjectQueue } from '@nestjs/bullmq';
-import { Queue } from 'bullmq';
-import { Injectable, UseGuards } from '@nestjs/common';
+import { HttpException, HttpStatus, Injectable, UseGuards } from '@nestjs/common';
+import { createApiError } from '../../../common/api-error';
 import { OnGatewayDisconnect } from '@nestjs/websockets';
 import { WsJwtGuard } from '../../../auth/guards/ws-jwt/ws-jwt.guard';
 import { SessionsService } from '../../sessions.service';
-import { RedisService } from '../../../redis/redis.service';
+import { AnswerSubmissionService } from '../../answer-submission.service';
+import {
+  AnswerSubmittedEvent,
+  QuizStartedEvent,
+  SessionEvents,
+} from '../../ports/session-events.port';
 
 @WebSocketGateway({
   cors: {
@@ -24,17 +28,15 @@ import { RedisService } from '../../../redis/redis.service';
   },
 })
 @Injectable()
-export class SessionGateway implements OnGatewayDisconnect {
+export class SessionGateway implements OnGatewayDisconnect, SessionEvents {
   @WebSocketServer()
   server!: Server;
 
   private clientSessions = new Map<string, string>();
 
   constructor(
-    @InjectQueue('answer-ingestion')
-    private readonly answerIngestionQueue: Queue,
     private readonly sessionsService: SessionsService,
-    private readonly redisService: RedisService,
+    private readonly answerSubmissionService: AnswerSubmissionService,
   ) {}
 
   @UseGuards(WsJwtGuard)
@@ -50,7 +52,12 @@ export class SessionGateway implements OnGatewayDisconnect {
       );
 
       if (result.error || !result.data) {
-        return { error: result.error || 'Session not found' };
+        const message = result.error || 'Session not found';
+        return this.socketError(
+          message === 'Session not found' ? HttpStatus.NOT_FOUND : HttpStatus.BAD_REQUEST,
+          message,
+          'joinSession',
+        );
       }
 
       const {
@@ -101,7 +108,7 @@ export class SessionGateway implements OnGatewayDisconnect {
         `[Socket] Error checking active session state for ${data.sessionId}:`,
         error,
       );
-      return { error: 'Internal server error' };
+      return this.socketError(HttpStatus.INTERNAL_SERVER_ERROR, 'An unexpected error occurred', 'joinSession');
     }
   }
 
@@ -117,37 +124,10 @@ export class SessionGateway implements OnGatewayDisconnect {
       timeTakenSecs: number;
     },
   ) {
-    const actualUserId = client.user?.userId;
-
-    if (!actualUserId) {
-      return { error: 'Unauthorized' };
-    }
-
-    const teacherRoom = `session_${data.sessionId}_teacher`;
-    if (client.rooms.has(teacherRoom)) {
-      return { error: 'Creators cannot submit answers' };
-    }
-
-    // 1. Instantly push answer to BullMQ queue for async processing
-    await this.answerIngestionQueue.add(
-      'submit-answer',
-      {
-        sessionId: data.sessionId,
-        questionId: data.questionId,
-        userId: actualUserId,
-        response: data.response,
-        timeTakenSecs: data.timeTakenSecs,
-      },
-      {
-        jobId: `answer-${data.sessionId}-${data.questionId}-${actualUserId}`,
-      },
-    );
-    // 2. Instantly track this question as answered in Redis to avoid DB fallback on rejoin
-    const answeredSetKey = `quiz:session:${data.sessionId}:answered:${actualUserId}`;
-    await this.redisService.sadd(answeredSetKey, data.questionId);
-
-    // 3. Return immediate acknowledgement to client
-    return { success: true, message: 'Answer received' };
+    const result = await this.submitAnswer(client, data);
+    return result.error
+      ? this.socketError(result.statusCode ?? HttpStatus.BAD_REQUEST, result.error, 'submitAnswer')
+      : { success: true, message: 'Answer queued' };
   }
 
   @UseGuards(WsJwtGuard)
@@ -162,53 +142,56 @@ export class SessionGateway implements OnGatewayDisconnect {
       timeTakenSecs: number;
     },
   ) {
-    const actualUserId = client.user?.userId;
-
-    if (!actualUserId) {
-      return { error: 'Unauthorized' };
-    }
-
-    const teacherRoom = `session_${data.sessionId}_teacher`;
-    if (client.rooms.has(teacherRoom)) {
-      return { error: 'Creators cannot submit answers' };
-    }
-
-    // 1. Instantly push answer to BullMQ queue for async processing
-    await this.answerIngestionQueue.add(
-      'submit-answer',
-      {
-        sessionId: data.sessionId,
-        questionId: data.questionId,
-        userId: actualUserId,
-        response: data.response,
-        timeTakenSecs: data.timeTakenSecs,
-      },
-      {
-        jobId: `answer-${data.sessionId}-${data.questionId}-${actualUserId}`,
-      },
-    );
-    
-    // 2. Instantly track this question as answered in Redis to avoid DB fallback on rejoin
-    const answeredSetKey = `quiz:session:${data.sessionId}:answered:${actualUserId}`;
-    await this.redisService.sadd(answeredSetKey, data.questionId);
-
-    // 3. Immediately fetch the next question
-    const nextQuestion = await this.sessionsService.getNextQuestionForUser(
-      data.sessionId,
-      actualUserId,
-    );
-
-    // 4. Return combined payload
-    return { success: true, message: 'Answer received', nextQuestion };
+    const result = await this.submitAnswer(client, data);
+    return result.error
+      ? this.socketError(result.statusCode ?? HttpStatus.BAD_REQUEST, result.error, 'submitAnswerAndGetNext')
+      : {
+          success: true,
+          message: 'Answer queued',
+          nextQuestion: result.nextQuestion,
+        };
   }
 
+  private async submitAnswer(
+    client: Socket & { user?: { userId: string } },
+    data: {
+      sessionId: string;
+      questionId: string;
+      response: string;
+      timeTakenSecs: number;
+    },
+  ): Promise<{ error?: string; statusCode?: number; nextQuestion?: unknown | null }> {
+    if (!client.user?.userId) return { error: 'Unauthorized', statusCode: HttpStatus.UNAUTHORIZED };
+    if (!data?.sessionId || !client.rooms.has(`session_${data.sessionId}`)) {
+      return { error: 'Join the session before submitting an answer', statusCode: HttpStatus.BAD_REQUEST };
+    }
+    try {
+      return await this.answerSubmissionService.submit({
+        ...data,
+        userId: client.user.userId,
+      });
+    } catch (error) {
+      return {
+        error:
+          error instanceof HttpException
+            ? error.message
+            : 'Unable to submit answer',
+        statusCode: error instanceof HttpException ? error.getStatus() : HttpStatus.INTERNAL_SERVER_ERROR,
+      };
+    }
+  }
+
+  @UseGuards(WsJwtGuard)
   @SubscribeMessage('requestNextQuestion')
   async handleRequestNextQuestion(
     @ConnectedSocket() client: Socket & { user?: any },
     @MessageBody() data: { sessionId: string },
   ) {
     const actualUserId = client.user?.userId;
-    if (!actualUserId) return { error: 'Unauthorized' };
+    if (!actualUserId) return this.socketError(HttpStatus.UNAUTHORIZED, 'Unauthorized', 'requestNextQuestion');
+    if (!data?.sessionId || !client.rooms.has(`session_${data.sessionId}`)) {
+      return this.socketError(HttpStatus.BAD_REQUEST, 'Join the session before requesting a question', 'requestNextQuestion');
+    }
 
     const nextQuestion = await this.sessionsService.getNextQuestionForUser(
       data.sessionId,
@@ -218,10 +201,47 @@ export class SessionGateway implements OnGatewayDisconnect {
     return { success: true, nextQuestion };
   }
 
+  private socketError(statusCode: number, message: string, event: string) {
+    const safeMessage = statusCode >= 500 ? 'An unexpected error occurred' : message;
+    return {
+      success: false,
+      ...createApiError(statusCode, safeMessage, `/socket.io/${event}`),
+    };
+  }
+
   broadcastToSession(sessionId: string, event: string, data: any) {
     const roomName = `session_${sessionId}`;
     this.server.to(roomName).emit(event, data);
     console.log(`[Socket] Broadcasted event ${event} to room ${roomName}`);
+  }
+
+  quizStarted(event: QuizStartedEvent): void {
+    const room = `session_${event.sessionId}`;
+    const teacherRoom = `${room}_teacher`;
+    this.server
+      .to(room)
+      .except(teacherRoom)
+      .emit('quiz_started', {
+        ...event,
+        questions: event.questions.slice(0, 1),
+      });
+    this.server.to(teacherRoom).emit('quiz_started', event);
+  }
+
+  answerSubmitted(sessionId: string, event: AnswerSubmittedEvent): void {
+    this.server
+      .to(`session_${sessionId}_teacher`)
+      .emit('live_answer_submitted', event);
+  }
+
+  sessionEnded(sessionId: string): void {
+    this.broadcastToSession(sessionId, 'session_ended', {
+      message: 'Time is up! The session has concluded.',
+    });
+  }
+
+  disconnectSession(sessionId: string): void {
+    this.server.in(`session_${sessionId}`).disconnectSockets(true);
   }
 
   private async broadcastParticipantCount(sessionId: string) {

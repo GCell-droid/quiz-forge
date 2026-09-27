@@ -1,14 +1,10 @@
 import {
   Injectable,
   NotFoundException,
-  Inject,
-  forwardRef,
   ForbiddenException,
   BadRequestException,
   InternalServerErrorException,
 } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
 import {
   QuizSession,
   SessionStatus,
@@ -18,7 +14,12 @@ import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import User from '../common/entity/user.entity';
 import { RedisService } from '../redis/redis.service';
-import { QuestionResponse } from './entities/question-response.entity/question-response.entity';
+import {
+  SessionRepository,
+  isSessionUuid,
+} from './repositories/session.repository';
+import { ResponseRepository } from './repositories/response.repository';
+import { PageOptions } from '../common/pagination';
 
 @Injectable()
 export class SessionsService {
@@ -26,12 +27,8 @@ export class SessionsService {
   private readonly CACHE_TTL_SECONDS = 86400; // 24 hours
 
   constructor(
-    @InjectRepository(QuizSession)
-    private readonly sessionRepo: Repository<QuizSession>,
-    @InjectRepository(QuestionResponse)
-    private readonly questionResponseRepo: Repository<QuestionResponse>,
-    @InjectRepository(User)
-    private readonly userRepo: Repository<User>,
+    private readonly sessionRepo: SessionRepository,
+    private readonly responseRepo: ResponseRepository,
     private readonly quizzesService: QuizzesService,
     @InjectQueue('quiz-lifecycle')
     private readonly quizLifecycleQueue: Queue,
@@ -39,13 +36,7 @@ export class SessionsService {
   ) {}
 
   async getMyResults(userId: string, sessionIdParam: string) {
-    const isUuid = sessionIdParam.length > 10;
-    const session = await this.sessionRepo.findOne({
-      where: isUuid
-        ? { sessionId: sessionIdParam }
-        : { joinCode: sessionIdParam },
-      relations: ['quiz'],
-    });
+    const session = await this.sessionRepo.findByReference(sessionIdParam);
 
     if (!session) {
       throw new NotFoundException('Session not found');
@@ -55,18 +46,13 @@ export class SessionsService {
 
     const quiz = await this.quizzesService.getQuiz(session.quiz.quizId);
 
-    const responses = await this.questionResponseRepo.find({
-      where: { session: { sessionId }, user: { uid: userId } },
-      relations: ['question'],
-    });
+    const responses = await this.responseRepo.findForUser(sessionId, userId);
 
     let totalScore = 0;
     let totalPossible = 0;
     let correctCount = 0;
 
-    const responseMap = new Map(
-      responses.map((r) => [r.question.questionId, r]),
-    );
+    const responseMap = new Map(responses.map((r) => [r.questionId, r]));
 
     const detailedResponses =
       quiz.quizQuestions?.map((qq) => {
@@ -134,16 +120,16 @@ export class SessionsService {
       try {
         const joinCode = this.generateJoinCode();
 
-        const session = this.sessionRepo.create({
+        const session = {
           quiz,
           createdBy: { uid: userId } as User,
           joinCode,
           status: SessionStatus.SCHEDULED,
           scheduledStart,
           timeLimit,
-        });
+        };
 
-        savedSession = await this.sessionRepo.save(session);
+        savedSession = await this.sessionRepo.createScheduled(session);
         break;
       } catch (error: any) {
         if (error.code === '23505') {
@@ -204,52 +190,16 @@ export class SessionsService {
     return result;
   }
 
-  async getHostedSessions(userId: string) {
-    return this.sessionRepo
-      .createQueryBuilder('session')
-      .leftJoinAndSelect('session.quiz', 'quiz')
-      .leftJoin('session.createdBy', 'createdBy')
-      .where('createdBy.uid = :userId', { userId })
-      .orderBy('session.scheduledStart', 'DESC')
-      .getMany();
+  async getHostedSessions(userId: string, options: PageOptions) {
+    return this.sessionRepo.findHostedBy(userId, options);
   }
 
-  async getMyHistory(userId: string) {
-    const history = await this.questionResponseRepo
-      .createQueryBuilder('qr')
-      .leftJoin('qr.user', 'user')
-      .leftJoin('qr.session', 'session')
-      .leftJoin('session.quiz', 'quiz')
-      .select([
-        'session.sessionId AS "sessionId"',
-        'quiz.title AS "quizTitle"',
-        'COALESCE(session.actualStart, session.scheduledStart) AS "date"',
-        'SUM(qr.pointsScored) AS "score"',
-      ])
-      .where('user.uid = :userId', { userId })
-      .groupBy('session.sessionId')
-      .addGroupBy('quiz.title')
-      .addGroupBy('session.actualStart')
-      .addGroupBy('session.scheduledStart')
-      .orderBy('"date"', 'DESC')
-      .getRawMany();
-
-    return history.map((h: any) => ({
-      sessionId: h.sessionId,
-      quizTitle: h.quizTitle,
-      date: h.date,
-      score: parseInt(h.score, 10) || 0,
-    }));
+  async getMyHistory(userId: string, options: PageOptions) {
+    return this.responseRepo.findHistory(userId, options);
   }
 
   async getSessionStats(userId: string, sessionIdParam: string) {
-    const isUuid = sessionIdParam.length > 10;
-    const session = await this.sessionRepo.findOne({
-      where: isUuid
-        ? { sessionId: sessionIdParam }
-        : { joinCode: sessionIdParam },
-      relations: ['quiz', 'createdBy'],
-    });
+    const session = await this.sessionRepo.findByReference(sessionIdParam);
 
     if (!session) {
       throw new NotFoundException('Session not found');
@@ -302,7 +252,7 @@ export class SessionsService {
 
   async processJoinSession(sessionIdParam: string, userId?: string) {
     let actualSessionId = sessionIdParam;
-    const isUuid = sessionIdParam.length > 10;
+    const isUuid = isSessionUuid(sessionIdParam);
 
     if (!isUuid) {
       const resolvedSessionId = await this.redisService.get(
@@ -325,12 +275,7 @@ export class SessionsService {
       actualSessionId = sessionDetails.sessionId;
     } else {
       // Fallback
-      const session = await this.sessionRepo.findOne({
-        where: isUuid
-          ? { sessionId: sessionIdParam }
-          : { joinCode: sessionIdParam },
-        relations: ['quiz', 'createdBy'],
-      });
+      const session = await this.sessionRepo.findByReference(sessionIdParam);
 
       if (!session) {
         return { error: 'Session not found' };
@@ -382,15 +327,10 @@ export class SessionsService {
         answeredQuestionIds = redisAnswerIds;
       } else {
         // 2. Fallback to DB ONLY if the Redis Set is empty (e.g. cache cleared)
-        const dbAnswers = await this.questionResponseRepo.find({
-          where: {
-            session: { sessionId: actualSessionId },
-            user: { uid: userId },
-          },
-          relations: ['question'],
-        });
-
-        answeredQuestionIds = dbAnswers.map((ans) => ans.question.questionId);
+        answeredQuestionIds = await this.responseRepo.findQuestionIdsForUser(
+          actualSessionId,
+          userId,
+        );
 
         // Warm up the cache for next time
         if (answeredQuestionIds.length > 0) {
@@ -401,18 +341,15 @@ export class SessionsService {
 
     // redisStatus is already fetched concurrently above
 
-    const isSessionActiveOrCompleted =
-      redisStatus === SessionStatus.ACTIVE ||
-      sessionDetails.status === SessionStatus.ACTIVE;
-
-    if (
-      !isSessionActiveOrCompleted &&
-      sessionDetails.status === SessionStatus.COMPLETED
-    ) {
+    if (sessionDetails.status === SessionStatus.COMPLETED) {
       return { error: 'Session has ended' };
     }
 
-    if (isSessionActiveOrCompleted) {
+    const isSessionActive =
+      redisStatus === SessionStatus.ACTIVE ||
+      sessionDetails.status === SessionStatus.ACTIVE;
+
+    if (isSessionActive) {
       const cacheKey = `quiz:session:${actualSessionId}:metadata`;
       let quizData = await this.redisService.get(cacheKey);
       let quiz;
@@ -502,89 +439,6 @@ export class SessionsService {
     };
   }
 
-  async evaluateAnswer(
-    sessionId: string,
-    questionId: string,
-    response: string,
-  ) {
-    let isCorrect = false;
-    let pointsScored = 0;
-
-    const cacheKey = `quiz:session:${sessionId}:metadata`;
-    const cachedQuiz = await this.redisService.get(cacheKey);
-
-    if (cachedQuiz) {
-      const quiz = JSON.parse(cachedQuiz);
-      const questionBridge = quiz.quizQuestions?.find(
-        (qq: any) => qq.question.questionId === questionId,
-      );
-
-      if (questionBridge) {
-        const question = questionBridge.question;
-        const correctAnswer = question.correctAnswer;
-
-        if (typeof correctAnswer === 'string') {
-          isCorrect =
-            correctAnswer.trim().toLowerCase() ===
-            response.trim().toLowerCase();
-        } else if (typeof correctAnswer === 'number') {
-          isCorrect = correctAnswer === Number(response);
-        } else if (typeof correctAnswer === 'boolean') {
-          isCorrect = correctAnswer === (response.toLowerCase() === 'true');
-        } else {
-          isCorrect =
-            JSON.stringify(correctAnswer) === JSON.stringify(response);
-        }
-
-        if (isCorrect) {
-          pointsScored = question.points || 1;
-        }
-      }
-    }
-
-    return { isCorrect, pointsScored };
-  }
-
-  async getUserName(
-    userId: string,
-    socketEmail?: string,
-    socketName?: string,
-  ): Promise<string> {
-    if (socketName) return socketName;
-    const dbUser = await this.userRepo.findOne({ where: { uid: userId } });
-    return (
-      dbUser?.name || (socketEmail ? socketEmail.split('@')[0] : 'Unknown')
-    );
-  }
-
-  async saveAnswerToRedis(
-    sessionId: string,
-    userId: string,
-    questionId: string,
-    payload: any,
-  ) {
-    const answersKey = `quiz:session:${sessionId}:answers`;
-    await this.redisService.hset(
-      answersKey,
-      `${userId}:${questionId}`,
-      JSON.stringify(payload),
-    );
-  }
-
-  async isSessionCreator(
-    sessionIdParam: string,
-    userId: string,
-  ): Promise<boolean> {
-    const isUuid = sessionIdParam.length > 10;
-    const session = await this.sessionRepo.findOne({
-      where: isUuid
-        ? { sessionId: sessionIdParam }
-        : { joinCode: sessionIdParam },
-      relations: ['createdBy'],
-    });
-    return session?.createdBy?.uid === userId;
-  }
-
   private async getMergedAnswers(sessionId: string, creatorId?: string) {
     const answersKey = `quiz:session:${sessionId}:answers`;
     const cachedAnswers = await this.redisService.hgetall(answersKey);
@@ -593,19 +447,16 @@ export class SessionsService {
         ? Object.values(cachedAnswers).map((v) => JSON.parse(v))
         : [];
 
-    const dbAnswers = await this.questionResponseRepo.find({
-      where: { session: { sessionId } },
-      relations: ['user', 'question'],
-    });
+    const dbAnswers = await this.responseRepo.findForSession(sessionId);
 
     const dbStats = dbAnswers
-      .filter((ans) => ans.user?.uid !== creatorId)
+      .filter((ans) => ans.userId !== creatorId)
       .map((ans) => ({
-        questionId: ans.question.questionId,
-        userId: ans.user?.uid,
+        questionId: ans.questionId,
+        userId: ans.userId,
         userName:
-          ans.user?.name ||
-          (ans.user?.email ? ans.user.email.split('@')[0] : 'Unknown'),
+          ans.userName ||
+          (ans.userEmail ? ans.userEmail.split('@')[0] : 'Unknown'),
         response: ans.response,
         timeTakenSecs: ans.timeTakenSecs,
         isCorrect: ans.isCorrect,

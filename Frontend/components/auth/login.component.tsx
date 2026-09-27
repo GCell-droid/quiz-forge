@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useState, FormEvent } from "react";
 import { useRouter } from "next/navigation";
-import { isAxiosError } from "axios";
+import { getApiErrorMessage } from "@/lib/api-error";
 import api from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -23,7 +23,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { ErrorMessage } from "@/components/shared/error-message";
 import { Mail, Lock } from "lucide-react";
-import { BACKEND_URL } from "@/lib/env";
+import { API_V1_URL } from "@/lib/env";
 
 export function LoginForm({
   className,
@@ -37,7 +37,7 @@ export function LoginForm({
 
   const handleGoogleLogin = () => {
     setGoogleLoading(true);
-    window.location.href = `${BACKEND_URL}/auth/google`;
+    window.location.href = `${API_V1_URL}/auth/google`;
   };
 
   async function handleSubmit(e: FormEvent<HTMLFormElement>) {
@@ -50,18 +50,14 @@ export function LoginForm({
     const password = formData.get("password");
 
     try {
-      await api.post("/auth/login", {
+      await api.post("/auth/sessions", {
         email,
         password,
       });
 
       window.location.href = "/dashboard";
     } catch (err: unknown) {
-      if (isAxiosError(err)) {
-        setError(err.response?.data?.message || "Login failed");
-      } else {
-        setError("An unexpected error occurred");
-      }
+      setError(getApiErrorMessage(err, "Login failed"));
     } finally {
       setLoading(false);
     }

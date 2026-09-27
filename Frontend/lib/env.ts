@@ -5,3 +5,4 @@ if (!backendUrl) {
 }
 
 export const BACKEND_URL = backendUrl;
+export const API_V1_URL = `${backendUrl.replace(/\/$/, "")}/v1`;

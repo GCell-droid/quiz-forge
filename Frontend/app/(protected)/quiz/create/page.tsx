@@ -1,10 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import api from "@/lib/api";
-import { isAxiosError } from "axios";
+import { getApiErrorMessage } from "@/lib/api-error";
 import { QuizStatus, QuizVisibility, QuestionType } from "@/lib/enums";
 import { CreateQuestionDto, QuestionBundle } from "@/lib/types";
 import { Button } from "@/components/ui/button";
@@ -20,13 +20,13 @@ import {
   Field,
   FieldGroup,
   FieldLabel,
-  FieldDescription,
 } from "@/components/ui/field";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { TagInput } from "@/components/shared/tag-input";
 import { QuestionEditor } from "@/components/shared/question-editor";
 import { ErrorMessage } from "@/components/shared/error-message";
 import { Loading } from "@/components/shared/loading";
+import { PageResult, PaginationControls } from "@/components/shared/pagination-controls";
 import { ArrowLeft, Save, FolderOpen } from "lucide-react";
 
 export default function CreateQuizPage() {
@@ -51,6 +51,9 @@ export default function CreateQuizPage() {
   );
   const [bundles, setBundles] = useState<QuestionBundle[]>([]);
   const [bundlesLoading, setBundlesLoading] = useState(false);
+  const [bundlePage, setBundlePage] = useState(1);
+  const [bundleTotalPages, setBundleTotalPages] = useState(0);
+  const [bundleTotal, setBundleTotal] = useState(0);
 
   // Manual mode
   const [questions, setQuestions] = useState<CreateQuestionDto[]>([
@@ -67,21 +70,25 @@ export default function CreateQuizPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchBundles = async () => {
+  const fetchBundles = useCallback(async () => {
     try {
       setBundlesLoading(true);
-      const res = await api.get("/quizzes/bundles");
-      setBundles(res.data);
-    } catch {
-      // Silently fail
+      const res = await api.get<PageResult<QuestionBundle>>("/bundles", {
+        params: { page: bundlePage, pageSize: 12 },
+      });
+      setBundles(res.data.items);
+      setBundleTotal(res.data.total);
+      setBundleTotalPages(res.data.totalPages);
+    } catch (err) {
+      setError(getApiErrorMessage(err, "Failed to load bundles"));
     } finally {
       setBundlesLoading(false);
     }
-  };
+  }, [bundlePage]);
 
   useEffect(() => {
     fetchBundles();
-  }, []);
+  }, [fetchBundles]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -118,9 +125,7 @@ export default function CreateQuizPage() {
       const res = await api.post("/quizzes", payload);
       router.push(`/quiz/${res.data.quizId}`);
     } catch (err) {
-      if (isAxiosError(err)) {
-        setError(err.response?.data?.message || "Failed to create quiz");
-      }
+      setError(getApiErrorMessage(err, "Failed to create quiz"));
     } finally {
       setLoading(false);
     }
@@ -298,6 +303,7 @@ export default function CreateQuizPage() {
                     })}
                   </div>
                 )}
+                <PaginationControls page={bundlePage} totalPages={bundleTotalPages} total={bundleTotal} loading={bundlesLoading} onPageChange={setBundlePage} />
               </CardContent>
             </Card>
           </TabsContent>

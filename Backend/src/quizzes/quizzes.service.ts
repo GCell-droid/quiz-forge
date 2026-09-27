@@ -1,164 +1,74 @@
 import {
-  Injectable,
-  NotFoundException,
   BadRequestException,
   ForbiddenException,
+  Injectable,
+  NotFoundException,
 } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, DataSource } from 'typeorm';
-import { Quiz } from './entities/quiz.entity/quiz.entity';
-import { Question } from './entities/question.entity/question.entity';
-import { QuizQuestion } from './entities/quiz-question.entity/quiz-question.entity';
 import { CreateQuizDto, UpdateQuizDto } from './dto/quiz.dto';
 import { CreateQuestionDto, UpdateQuestionDto } from './dto/question.dto';
-import User from '../common/entity/user.entity';
 import { BundlesService } from './bundles.service';
+import { QuizRepository } from './repositories/quiz.repository';
+import { PageOptions } from '../common/pagination';
 
 @Injectable()
 export class QuizzesService {
   constructor(
-    @InjectRepository(Quiz)
-    private readonly quizRepo: Repository<Quiz>,
-    @InjectRepository(QuizQuestion)
-    private readonly quizQuestionRepo: Repository<QuizQuestion>,
+    private readonly quizzes: QuizRepository,
     private readonly bundlesService: BundlesService,
-    private readonly dataSource: DataSource,
   ) {}
 
   async createQuiz(userId: string, data: CreateQuizDto) {
-    let rawQuestions: any[] = [];
+    let questions: CreateQuestionDto[] = [];
 
-    if (data.bundleIds && data.bundleIds.length > 0) {
-      let currentOrder = 1;
-
+    if (data.bundleIds?.length) {
       const bundles = await this.bundlesService.getBundles(data.bundleIds);
-
-      for (const bId of data.bundleIds) {
-        const bundle = bundles.find(b => b.bundleId === bId);
-        if (bundle && bundle.questions && bundle.questions.length > 0) {
-          // Sort by bundle's internal displayOrder to maintain intended order
-          const sortedQuestions = bundle.questions.sort((a, b) => a.displayOrder - b.displayOrder);
-          
-          for (const bq of sortedQuestions) {
-            rawQuestions.push({
-              title: bq.question.title,
-              type: bq.question.type,
-              options: bq.question.options,
-              correctAnswer: bq.question.correctAnswer,
-              points: bq.question.points,
-              displayOrder: currentOrder++,
-            });
-          }
+      const byId = new Map(bundles.map((bundle) => [bundle.bundleId, bundle]));
+      let displayOrder = 1;
+      for (const bundleId of data.bundleIds) {
+        const bundle = byId.get(bundleId);
+        for (const bridge of [...(bundle?.questions ?? [])].sort(
+          (a, b) => a.displayOrder - b.displayOrder,
+        )) {
+          questions.push({
+            title: bridge.question.title,
+            type: bridge.question.type,
+            options: bridge.question.options,
+            correctAnswer: bridge.question.correctAnswer,
+            points: bridge.question.points,
+            displayOrder: displayOrder++,
+          });
         }
       }
-      
-      if (rawQuestions.length === 0) {
-        throw new BadRequestException('The selected bundles resulted in zero valid questions');
+      if (questions.length === 0) {
+        throw new BadRequestException(
+          'The selected bundles resulted in zero valid questions',
+        );
       }
-    } else if (data.questions && data.questions.length > 0) {
-      rawQuestions = data.questions;
+    } else if (data.questions?.length) {
+      questions = data.questions;
     } else {
       throw new BadRequestException('A quiz must have at least one question');
     }
 
-    const queryRunner = this.dataSource.createQueryRunner();
-    await queryRunner.connect();
-    await queryRunner.startTransaction();
-
-    try {
-      const quiz = queryRunner.manager.create(Quiz, {
-        title: data.title,
-        description: data.description,
-        status: data.status,
-        visibility: data.visibility,
-        tags: data.tags,
-        createdBy: { uid: userId } as User,
-      });
-
-      const savedQuiz = await queryRunner.manager.save(quiz);
-
-      if (rawQuestions.length > 0) {
-        const questionsToSave = rawQuestions.map(qData => queryRunner.manager.create(Question, {
-          title: qData.title,
-          type: qData.type,
-          options: qData.options,
-          correctAnswer: qData.correctAnswer,
-          points: qData.points ?? 1,
-        }));
-
-        const savedQuestions = await queryRunner.manager.save(questionsToSave);
-
-        const quizQuestionsToSave = savedQuestions.map((savedQuestion, i) => queryRunner.manager.create(QuizQuestion, {
-          quiz: savedQuiz,
-          question: savedQuestion,
-          displayOrder: rawQuestions[i].displayOrder ?? i + 1,
-        }));
-
-        await queryRunner.manager.save(quizQuestionsToSave);
-      }
-
-      await queryRunner.commitTransaction();
-      return this.getQuiz(savedQuiz.quizId);
-    } catch (err) {
-      await queryRunner.rollbackTransaction();
-      throw err;
-    } finally {
-      await queryRunner.release();
-    }
+    return this.quizzes.createWithQuestions(userId, data, questions);
   }
 
-  async getQuiz(quizId: string) {
-    const quiz = await this.quizRepo
-      .createQueryBuilder('quiz')
-      .where('quiz.quizId = :quizId', { quizId })
-      .leftJoinAndSelect('quiz.quizQuestions', 'quizQuestions')
-      .leftJoinAndSelect('quizQuestions.question', 'question')
-      .leftJoin('quiz.createdBy', 'createdBy')
-      .addSelect(['createdBy.uid', 'createdBy.name', 'createdBy.email'])
-      .getOne();
-
-    if (!quiz) throw new NotFoundException('Quiz not found');
-
-    if (quiz.quizQuestions) {
-      quiz.quizQuestions.sort((a, b) => a.displayOrder - b.displayOrder);
-    }
-
-    return quiz;
+  getQuiz(quizId: string) {
+    return this.quizzes.findById(quizId);
   }
 
-  async getAllQuizzes(userId?: string) {
-    const query = this.quizRepo
-      .createQueryBuilder('quiz')
-      .leftJoin('quiz.createdBy', 'createdBy')
-      .addSelect(['createdBy.uid', 'createdBy.name', 'createdBy.email'])
-      .orderBy('quiz.createdAt', 'DESC');
-
-    if (userId) {
-      query.andWhere('createdBy.uid = :userId', { userId });
-    } else {
-      query.andWhere('quiz.visibility = :visibility', {
-        visibility: 'PUBLIC',
-      });
-    }
-
-    return query.getMany();
+  getAllQuizzes(options: PageOptions, userId?: string) {
+    return this.quizzes.findAll(options, userId);
   }
 
   async updateQuiz(userId: string, quizId: string, data: UpdateQuizDto) {
-    const quiz = await this.getQuiz(quizId);
-    if (quiz.createdBy.uid !== userId) {
-      throw new ForbiddenException('You can only edit your own quizzes');
-    }
-    await this.quizRepo.update(quizId, data);
-    return this.getQuiz(quizId);
+    await this.assertQuizOwner(userId, quizId);
+    return this.quizzes.updateMetadata(quizId, data);
   }
 
   async deleteQuiz(userId: string, quizId: string) {
-    const quiz = await this.getQuiz(quizId);
-    if (quiz.createdBy.uid !== userId) {
-      throw new ForbiddenException('You can only delete your own quizzes');
-    }
-    await this.quizRepo.delete(quizId);
+    await this.assertQuizOwner(userId, quizId);
+    await this.quizzes.delete(quizId);
     return { message: 'Quiz deleted successfully' };
   }
 
@@ -167,45 +77,8 @@ export class QuizzesService {
     quizId: string,
     data: CreateQuestionDto,
   ) {
-    const quiz = await this.getQuiz(quizId);
-    if (quiz.createdBy.uid !== userId) {
-      throw new ForbiddenException(
-        'You can only add questions to your own quizzes',
-      );
-    }
-
-    const queryRunner = this.dataSource.createQueryRunner();
-    await queryRunner.connect();
-    await queryRunner.startTransaction();
-
-    try {
-      const question = queryRunner.manager.create(Question, {
-        title: data.title,
-        type: data.type,
-        options: data.options,
-        correctAnswer: data.correctAnswer,
-        points: data.points ?? 1,
-      });
-      const savedQuestion = await queryRunner.manager.save(question);
-
-      const quizQuestion = queryRunner.manager.create(QuizQuestion, {
-        quiz,
-        question: savedQuestion,
-        displayOrder:
-          data.displayOrder ??
-          (quiz.quizQuestions ? quiz.quizQuestions.length + 1 : 1),
-      });
-
-      const savedQuizQuestion = await queryRunner.manager.save(quizQuestion);
-
-      await queryRunner.commitTransaction();
-      return savedQuizQuestion;
-    } catch (err) {
-      await queryRunner.rollbackTransaction();
-      throw err;
-    } finally {
-      await queryRunner.release();
-    }
+    const quiz = await this.requireOwnedQuiz(userId, quizId);
+    return this.quizzes.addQuestion(quiz, data);
   }
 
   async updateQuizQuestion(
@@ -213,91 +86,40 @@ export class QuizzesService {
     bridgeId: string,
     data: UpdateQuestionDto,
   ) {
-    const quizQuestion = await this.quizQuestionRepo.findOne({
-      where: { id: bridgeId },
-      relations: ['question', 'quiz', 'quiz.createdBy'],
-    });
-
-    if (!quizQuestion)
-      throw new NotFoundException('Quiz question bridge not found');
-    if (quizQuestion.quiz.createdBy.uid !== userId) {
+    const bridge = await this.quizzes.findQuestionBridge(bridgeId);
+    if (!bridge) throw new NotFoundException('Quiz question bridge not found');
+    if (bridge.quiz.createdBy.uid !== userId) {
       throw new ForbiddenException(
         'You can only edit questions in your own quizzes',
       );
     }
-
-    const queryRunner = this.dataSource.createQueryRunner();
-    await queryRunner.connect();
-    await queryRunner.startTransaction();
-
-    try {
-      if (
-        data.title ||
-        data.type ||
-        data.options ||
-        data.correctAnswer ||
-        data.points
-      ) {
-        await queryRunner.manager.update(Question, quizQuestion.question.questionId, {
-          title: data.title ?? quizQuestion.question.title,
-          type: data.type ?? quizQuestion.question.type,
-          options: data.options ?? quizQuestion.question.options,
-          correctAnswer:
-            data.correctAnswer ?? quizQuestion.question.correctAnswer,
-          points: data.points ?? quizQuestion.question.points,
-        });
-      }
-
-      if (data.displayOrder !== undefined) {
-        await queryRunner.manager.update(QuizQuestion, bridgeId, {
-          displayOrder: data.displayOrder,
-        });
-      }
-
-      await queryRunner.commitTransaction();
-
-      return this.quizQuestionRepo.findOne({
-        where: { id: bridgeId },
-        relations: ['question'],
-      });
-    } catch (err) {
-      await queryRunner.rollbackTransaction();
-      throw err;
-    } finally {
-      await queryRunner.release();
-    }
+    return this.quizzes.updateQuestion(bridge, data);
   }
 
   async deleteQuizQuestion(userId: string, bridgeId: string) {
-    const quizQuestion = await this.quizQuestionRepo.findOne({
-      where: { id: bridgeId },
-      relations: ['question', 'quiz', 'quiz.createdBy'],
-    });
-    if (!quizQuestion)
-      throw new NotFoundException('Quiz question bridge not found');
-    if (quizQuestion.quiz.createdBy.uid !== userId) {
+    const bridge = await this.quizzes.findQuestionBridge(bridgeId);
+    if (!bridge) throw new NotFoundException('Quiz question bridge not found');
+    if (bridge.quiz.createdBy.uid !== userId) {
       throw new ForbiddenException(
         'You can only delete questions from your own quizzes',
       );
     }
+    await this.quizzes.deleteQuestion(bridge);
+    return { message: 'Question deleted from quiz successfully' };
+  }
 
-    const questionId = quizQuestion.question.questionId;
-
-    const queryRunner = this.dataSource.createQueryRunner();
-    await queryRunner.connect();
-    await queryRunner.startTransaction();
-
-    try {
-      await queryRunner.manager.delete(QuizQuestion, bridgeId);
-      await queryRunner.manager.softDelete(Question, questionId);
-
-      await queryRunner.commitTransaction();
-      return { message: 'Question deleted from quiz successfully' };
-    } catch (err) {
-      await queryRunner.rollbackTransaction();
-      throw err;
-    } finally {
-      await queryRunner.release();
+  private async requireOwnedQuiz(userId: string, quizId: string) {
+    const quiz = await this.quizzes.findById(quizId);
+    if (quiz.createdBy.uid !== userId) {
+      throw new ForbiddenException('You can only edit your own quizzes');
     }
+    return quiz;
+  }
+
+  private async assertQuizOwner(userId: string, quizId: string): Promise<void> {
+    const ownerId = await this.quizzes.findOwnerId(quizId);
+    if (!ownerId) throw new NotFoundException('Quiz not found');
+    if (ownerId !== userId)
+      throw new ForbiddenException('You can only edit your own quizzes');
   }
 }

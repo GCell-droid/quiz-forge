@@ -7,8 +7,6 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
-import { Repository } from 'typeorm';
-import { InjectRepository } from '@nestjs/typeorm';
 import { ConfigService } from '@nestjs/config';
 import { RegisterDTO } from './dto/register.dto';
 import bcrypt from 'bcrypt';
@@ -16,49 +14,41 @@ import { GoogleRegisterDTO } from './dto/googleregistration.dto';
 import type { Request, Response } from 'express';
 import { UserRole } from 'src/common/enums/enum';
 import User from 'src/common/entity/user.entity';
+import { UserRepository } from '../common/repositories/user.repository';
 import LoginDto from './dto/login.dto';
 
 @Injectable()
 export class AuthService {
   constructor(
-    @InjectRepository(User)
-    private readonly userRepository: Repository<User>,
+    private readonly userRepository: UserRepository,
     private jwtService: JwtService,
     private readonly configService: ConfigService,
   ) {}
 
   async register(registerdto: RegisterDTO, res: Response) {
-    try {
-      const existingUser = await this.userRepository.findOne({
-        where: { email: registerdto.email },
-      });
-      if (existingUser) {
-        throw new ConflictException(
-          "Can't Register the User. Conflicting Email!",
-        );
-      }
-      const hashedPassword = await this.hashPassword(registerdto.password!);
-
-      const newUser = this.userRepository.create({
-        name: registerdto.name,
-        email: registerdto.email,
-        passwordHash: hashedPassword,
-        role: registerdto.role,
-      });
-      const savedUser = await this.userRepository.save(newUser);
-
-      const { passwordHash, ...result } = savedUser;
-      const tokens = this.generateToken(savedUser);
-      this.setAuthCookies(tokens, res);
-      
-      return {
-        user: result,
-        needsRole: false,
-        message: 'Registration Successful',
-      };
-    } catch (err) {
-      throw new ConflictException('Registration failed');
+    const existingUser = await this.userRepository.findByEmail(registerdto.email);
+    if (existingUser) {
+      throw new ConflictException("Can't Register the User. Conflicting Email!");
     }
+    const hashedPassword = await this.hashPassword(registerdto.password!);
+
+    const newUser = this.userRepository.create({
+      name: registerdto.name,
+      email: registerdto.email,
+      passwordHash: hashedPassword,
+      role: registerdto.role,
+    });
+    const savedUser = await this.userRepository.save(newUser);
+
+    const { passwordHash, ...result } = savedUser;
+    const tokens = this.generateToken(savedUser);
+    this.setAuthCookies(tokens, res);
+
+    return {
+      user: result,
+      needsRole: false,
+      message: 'Registration Successful',
+    };
   }
 
   private async hashPassword(password: string): Promise<string> {
@@ -73,9 +63,7 @@ export class AuthService {
         const payload = this.jwtService.verify(token as string, {
           secret: this.configService.get<string>('JWT_SECRET'),
         });
-        const user = await this.userRepository.findOne({
-          where: { uid: payload.sub as string },
-        });
+        const user = await this.userRepository.findById(payload.sub as string);
 
         if (user) {
           const { passwordHash, ...result } = user;
@@ -86,9 +74,7 @@ export class AuthService {
       }
       throw new Error('No valid session');
     } catch (err) {
-      const user = await this.userRepository.findOne({
-        where: { email: logindto.email },
-      });
+      const user = await this.userRepository.findByEmail(logindto.email);
 
       if (
         !user ||
@@ -108,9 +94,7 @@ export class AuthService {
   }
 
   async updateRole(userId: string, role: UserRole, res: Response) {
-    const user = await this.userRepository.findOne({
-      where: { uid: userId as any },
-    });
+    const user = await this.userRepository.findById(userId);
 
     if (!user) {
       throw new UnauthorizedException('User not found');
@@ -172,9 +156,7 @@ export class AuthService {
       if (!payload || !payload?.sub) {
         throw new UnauthorizedException('Invalid Token');
       }
-      const user = await this.userRepository.findOne({
-        where: { uid: payload.sub as any },
-      });
+      const user = await this.userRepository.findById(payload.sub as string);
       if (!user) throw new UnauthorizedException('Invalid Token');
       
       const accessToken = this.generateAccessToken(user);
@@ -194,9 +176,7 @@ export class AuthService {
   }
 
   async validateGoogleUser(googleUser: GoogleRegisterDTO, role?: UserRole) {
-    const existingUser = await this.userRepository.findOne({
-      where: { email: googleUser.email },
-    });
+    const existingUser = await this.userRepository.findByEmail(googleUser.email);
 
     if (existingUser) {
       // Pre-Account Takeover Protection
@@ -235,9 +215,7 @@ export class AuthService {
   }
 
   async getUserById(Userid: number | string) {
-    const user = await this.userRepository.findOne({
-      where: { uid: Userid as any },
-    });
+    const user = await this.userRepository.findById(String(Userid));
     if (!user) {
       throw new Error('User not found');
     }

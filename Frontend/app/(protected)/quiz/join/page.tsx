@@ -17,6 +17,7 @@ import { Loading } from "@/components/shared/loading";
 import { ErrorMessage } from "@/components/shared/error-message";
 import { LogIn, Clock } from "lucide-react";
 import { QuizStartedPayload } from "@/lib/types";
+import { getSocketErrorMessage } from "@/lib/api-error";
 
 export default function JoinQuizPage() {
   const router = useRouter();
@@ -96,8 +97,8 @@ export default function JoinQuizPage() {
     socket.emit("joinSession", { sessionId }, (response: any) => {
       setLoading(false);
       // Wait for response format (assuming it might send success)
-      if (response && response.error) {
-        setError(response.error);
+      if (response?.success === false) {
+        setError(getSocketErrorMessage(response, "Unable to join session"));
         socket.disconnect();
       } else {
         if (response?.success && response?.data) {

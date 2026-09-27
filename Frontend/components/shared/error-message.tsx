@@ -11,6 +11,7 @@ export function ErrorMessage({ message, className }: ErrorMessageProps) {
 
   return (
     <div
+      role="alert"
       className={cn(
         "flex items-center gap-2 rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive",
         className,

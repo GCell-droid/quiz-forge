@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { isAxiosError } from "axios";
+import { getApiErrorMessage } from "@/lib/api-error";
 import api from "@/lib/api";
 import { useAuth } from "@/components/auth/auth-context";
 import { Button } from "@/components/ui/button";
@@ -37,7 +37,7 @@ export default function ProfileEditPage() {
 
     try {
       // Call backend to update role and issue new JWT
-      await api.patch("/auth/role", { role });
+      await api.patch("/auth/accounts/me/role", { role });
       
       // Refresh the user context so the new role is picked up locally
       await refresh();
@@ -45,11 +45,7 @@ export default function ProfileEditPage() {
       // Navigate to dashboard
       window.location.href = "/dashboard";
     } catch (err) {
-      if (isAxiosError(err)) {
-        setError(err.response?.data?.message || "Failed to update role");
-      } else {
-        setError("An unexpected error occurred");
-      }
+      setError(getApiErrorMessage(err, "Failed to update role"));
     } finally {
       setLoading(false);
     }
