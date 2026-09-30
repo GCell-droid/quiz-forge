@@ -34,6 +34,11 @@ import { MetricsMiddleware } from './metrics/metrics.middleware';
         rejectUnauthorized: false,
       },
       autoLoadEntities: true,
+      extra: {
+        max: 10,
+        idleTimeoutMillis: 300000,
+        connectionTimeoutMillis: 10000,
+      },
       // synchronize: true,
       // dropSchema: true,
     }),

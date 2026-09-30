@@ -19,6 +19,7 @@ describe('AnswerSubmissionService', () => {
   };
   const redisService = {
     sadd: jest.fn(),
+    get: jest.fn().mockResolvedValue(null),
   };
   const answerQueue = {
     enqueue: jest.fn(),
@@ -33,6 +34,7 @@ describe('AnswerSubmissionService', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    redisService.get.mockResolvedValue(null);
     sessionRepo.findByIdWithCreator.mockResolvedValue({
       status: SessionStatus.ACTIVE,
       createdBy: { uid: 'teacher-1' },

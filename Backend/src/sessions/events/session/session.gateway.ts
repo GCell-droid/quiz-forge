@@ -129,6 +129,9 @@ export class SessionGateway
         const roomName = `session_${sessionId}`;
 
         client.join(roomName);
+        if (data?.sessionId && data.sessionId !== sessionId) {
+          client.join(`session_${data.sessionId}`);
+        }
         console.log(`[Socket] Client ${client.id} joined room: ${roomName}`);
         this.clientSessions.set(client.id, sessionId);
         this.broadcastParticipantCount(sessionId);
@@ -136,6 +139,9 @@ export class SessionGateway
         if (isCreator) {
           const teacherRoom = `session_${sessionId}_teacher`;
           client.join(teacherRoom);
+          if (data?.sessionId && data.sessionId !== sessionId) {
+            client.join(`session_${data.sessionId}_teacher`);
+          }
           console.log(
             `[Socket] Teacher ${client.id} joined room: ${teacherRoom}`,
           );
@@ -158,6 +164,7 @@ export class SessionGateway
             isCreator,
             initialStats,
             answeredQuestionIds,
+            quizPayload,
           },
         };
       } catch (error) {

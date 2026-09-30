@@ -82,7 +82,7 @@
       "datasource": { "type": "prometheus", "uid": "ffzu77r9cglc0e" },
       "targets": [
         {
-          "expr": "100 * sum(rate(http_requests_total{job=\"QuizForge\", status_code=~\"5..\"}[5m])) / sum(rate(http_requests_total{job=\"QuizForge\"}[5m]))",
+          "expr": "(100 * sum(rate(http_requests_total{job=\"QuizForge\", status_code=~\"5..\"}[5m])) / sum(rate(http_requests_total{job=\"QuizForge\"}[5m]))) or vector(0)",
           "legendFormat": "5xx Error %"
         }
       ],
@@ -108,7 +108,7 @@
       "datasource": { "type": "prometheus", "uid": "ffzu77r9cglc0e" },
       "targets": [
         {
-          "expr": "sum(rate(http_requests_total{job=\"QuizForge\", status_code=~\"4..\"}[5m]))",
+          "expr": "sum(rate(http_requests_total{job=\"QuizForge\", status_code=~\"4..\"}[5m])) or vector(0)",
           "legendFormat": "4xx Rate"
         }
       ],
@@ -128,7 +128,7 @@
       "datasource": { "type": "prometheus", "uid": "ffzu77r9cglc0e" },
       "targets": [
         {
-          "expr": "sum(rate(http_requests_total{job=\"QuizForge\", status_code=~\"5..\"}[5m]))",
+          "expr": "sum(rate(http_requests_total{job=\"QuizForge\", status_code=~\"5..\"}[5m])) or vector(0)",
           "legendFormat": "5xx Rate"
         }
       ],
@@ -183,6 +183,19 @@
           "unit": "short",
           "color": { "fixedColor": "blue", "mode": "fixed" }
         }
+      },
+      "options": {
+        "reduceOptions": {
+          "values": false,
+          "calcs": ["lastNotNull"],
+          "fields": ""
+        },
+        "orientation": "auto",
+        "textMode": "auto",
+        "wideLayout": true,
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto"
       }
     },
     {
@@ -193,7 +206,7 @@
       "datasource": { "type": "prometheus", "uid": "ffzu77r9cglc0e" },
       "targets": [
         {
-          "expr": "sum(rate(websocket_messages_total{job=\"QuizForge\"}[5m]))",
+          "expr": "sum(rate(websocket_messages_total{job=\"QuizForge\"}[5m])) or vector(0)",
           "legendFormat": "Total Messages/sec"
         },
         {
@@ -210,22 +223,22 @@
     },
     {
       "id": 9,
-      "title": "WebSocket Message Latency (P50, P95, P99)",
+      "title": "WebSocket Message Latency by Event",
       "type": "timeseries",
       "gridPos": { "h": 8, "w": 6, "x": 12, "y": 18 },
       "datasource": { "type": "prometheus", "uid": "ffzu77r9cglc0e" },
       "targets": [
         {
-          "expr": "histogram_quantile(0.50, sum(rate(websocket_message_duration_seconds_bucket{job=\"QuizForge\"}[5m])) by (le)) * 1000",
-          "legendFormat": "P50 Latency"
+          "expr": "(histogram_quantile(0.50, sum by (le, event) (rate(websocket_message_duration_seconds_bucket{job=\"QuizForge\"}[$__rate_interval]))) * 1000)",
+          "legendFormat": "{{event}} (P50)"
         },
         {
-          "expr": "histogram_quantile(0.95, sum(rate(websocket_message_duration_seconds_bucket{job=\"QuizForge\"}[5m])) by (le)) * 1000",
-          "legendFormat": "P95 Latency"
+          "expr": "(histogram_quantile(0.95, sum by (le, event) (rate(websocket_message_duration_seconds_bucket{job=\"QuizForge\"}[$__rate_interval]))) * 1000)",
+          "legendFormat": "{{event}} (P95)"
         },
         {
-          "expr": "histogram_quantile(0.99, sum(rate(websocket_message_duration_seconds_bucket{job=\"QuizForge\"}[5m])) by (le)) * 1000",
-          "legendFormat": "P99 Latency"
+          "expr": "(histogram_quantile(0.99, sum by (le, event) (rate(websocket_message_duration_seconds_bucket{job=\"QuizForge\"}[$__rate_interval]))) * 1000)",
+          "legendFormat": "{{event}} (P99)"
         }
       ],
       "fieldConfig": {
@@ -243,7 +256,7 @@
       "datasource": { "type": "prometheus", "uid": "ffzu77r9cglc0e" },
       "targets": [
         {
-          "expr": "sum(rate(websocket_errors_total{job=\"QuizForge\"}[5m]))",
+          "expr": "sum(rate(websocket_errors_total{job=\"QuizForge\"}[5m])) or vector(0)",
           "legendFormat": "Total Errors/sec"
         },
         {

@@ -345,9 +345,36 @@ export class SessionsService {
       return { error: 'Session has ended' };
     }
 
+    const hasScheduledTimePassed =
+      Boolean(sessionDetails.scheduledStart) &&
+      new Date(sessionDetails.scheduledStart).getTime() <= Date.now();
+
     const isSessionActive =
       redisStatus === SessionStatus.ACTIVE ||
-      sessionDetails.status === SessionStatus.ACTIVE;
+      sessionDetails.status === SessionStatus.ACTIVE ||
+      hasScheduledTimePassed;
+
+    if (
+      hasScheduledTimePassed &&
+      sessionDetails.status === SessionStatus.SCHEDULED
+    ) {
+      sessionDetails.status = SessionStatus.ACTIVE;
+      if (!sessionDetails.actualStart) {
+        sessionDetails.actualStart = new Date();
+      }
+      await Promise.all([
+        this.redisService.set(
+          `quiz:session:${actualSessionId}:status`,
+          SessionStatus.ACTIVE,
+          3600,
+        ),
+        this.redisService.set(
+          `quiz:session:${actualSessionId}:details`,
+          JSON.stringify(sessionDetails),
+          3600,
+        ),
+      ]);
+    }
 
     if (isSessionActive) {
       const cacheKey = `quiz:session:${actualSessionId}:metadata`;
@@ -387,6 +414,17 @@ export class SessionsService {
             (Date.now() - actualStartDate.getTime()) / 1000,
           );
           remainingTime = Math.max(0, sessionDetails.timeLimit - elapsedSecs);
+        } else if (sessionDetails.scheduledStart) {
+          const scheduledStartDate =
+            typeof sessionDetails.scheduledStart === 'string'
+              ? new Date(sessionDetails.scheduledStart)
+              : sessionDetails.scheduledStart;
+          const elapsedSecs = Math.floor(
+            (Date.now() - scheduledStartDate.getTime()) / 1000,
+          );
+          if (elapsedSecs > 0) {
+            remainingTime = Math.max(0, sessionDetails.timeLimit - elapsedSecs);
+          }
         }
 
         let questionsToReturn: any[] = [];
@@ -429,7 +467,7 @@ export class SessionsService {
       success: true,
       data: {
         sessionId: actualSessionId,
-        status: sessionDetails.status,
+        status: isSessionActive ? SessionStatus.ACTIVE : sessionDetails.status,
         scheduledStart: sessionDetails.scheduledStart,
         isCreator,
         initialStats: initialStatsPayload,

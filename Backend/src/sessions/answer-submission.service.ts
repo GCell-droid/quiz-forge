@@ -44,12 +44,34 @@ export class AnswerSubmissionService {
       throw new BadRequestException('Invalid answer');
     }
 
-    const session = await this.sessionRepo.findByIdWithCreator(sessionId);
-    if (!session) throw new NotFoundException('Session not found');
-    if (session.status !== SessionStatus.ACTIVE) {
+    let sessionStatus: string | undefined;
+    let creatorId: string | undefined;
+
+    const cachedDetailsStr = await this.redisService.get(
+      `quiz:session:${sessionId}:details`,
+    );
+
+    if (cachedDetailsStr) {
+      try {
+        const details = JSON.parse(cachedDetailsStr);
+        sessionStatus = details.status;
+        creatorId = details.creatorId;
+      } catch {
+        // Fall back to database on parse failure
+      }
+    }
+
+    if (!sessionStatus) {
+      const session = await this.sessionRepo.findByIdWithCreator(sessionId);
+      if (!session) throw new NotFoundException('Session not found');
+      sessionStatus = session.status;
+      creatorId = session.createdBy?.uid;
+    }
+
+    if (sessionStatus !== SessionStatus.ACTIVE) {
       throw new BadRequestException('Session is not active');
     }
-    if (session.createdBy?.uid === userId) {
+    if (creatorId === userId) {
       throw new ForbiddenException('Creators cannot submit answers');
     }
 
