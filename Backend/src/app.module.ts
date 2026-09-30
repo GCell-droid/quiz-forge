@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
 import { ScheduleModule } from '@nestjs/schedule';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ConfigModule, ConfigService } from '@nestjs/config';
@@ -14,6 +14,8 @@ import { DashboardModule } from './dashboard/dashboard.module';
 import { BullModule } from '@nestjs/bullmq';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
+import { MetricsModule } from './metrics/metrics.module';
+import { MetricsMiddleware } from './metrics/metrics.middleware';
 
 @Module({
   imports: [
@@ -64,8 +66,16 @@ import { AppService } from './app.service';
     UsersModule,
     RedisModule,
     DashboardModule,
+    MetricsModule,
   ],
   controllers: [AppController],
   providers: [AppService],
 })
-export class AppModule {}
+export class AppModule implements NestModule {
+  configure(consumer: MiddlewareConsumer) {
+    consumer
+      .apply(MetricsMiddleware)
+      .exclude('metrics', 'v1/metrics')
+      .forRoutes('*');
+  }
+}

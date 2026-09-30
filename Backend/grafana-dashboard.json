@@ -1,0 +1,274 @@
+{
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": {
+          "type": "grafana",
+          "uid": "-- Grafana --"
+        },
+        "enable": true,
+        "hide": true,
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "liveNow": false,
+  "panels": [
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 },
+      "id": 100,
+      "title": "HTTP Metrics",
+      "type": "row"
+    },
+    {
+      "id": 1,
+      "title": "HTTP Requests/sec",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 1 },
+      "datasource": { "type": "prometheus", "uid": "ffzu77r9cglc0e" },
+      "targets": [
+        {
+          "expr": "sum(rate(http_requests_total{job=\"QuizForge\"}[5m]))",
+          "legendFormat": "Total Requests/sec"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "custom": { "drawStyle": "line", "lineInterpolation": "smooth" }
+        }
+      }
+    },
+    {
+      "id": 2,
+      "title": "HTTP Latency (P50, P95, P99)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 1 },
+      "datasource": { "type": "prometheus", "uid": "ffzu77r9cglc0e" },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, sum(rate(http_request_duration_seconds_bucket{job=\"QuizForge\"}[5m])) by (le)) * 1000",
+          "legendFormat": "P50 Latency"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket{job=\"QuizForge\"}[5m])) by (le)) * 1000",
+          "legendFormat": "P95 Latency"
+        },
+        {
+          "expr": "histogram_quantile(0.99, sum(rate(http_request_duration_seconds_bucket{job=\"QuizForge\"}[5m])) by (le)) * 1000",
+          "legendFormat": "P99 Latency"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "custom": { "drawStyle": "line", "lineInterpolation": "smooth" }
+        }
+      }
+    },
+    {
+      "id": 3,
+      "title": "HTTP 5xx Error Percentage",
+      "type": "stat",
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 1 },
+      "datasource": { "type": "prometheus", "uid": "ffzu77r9cglc0e" },
+      "targets": [
+        {
+          "expr": "100 * sum(rate(http_requests_total{job=\"QuizForge\", status_code=~\"5..\"}[5m])) / sum(rate(http_requests_total{job=\"QuizForge\"}[5m]))",
+          "legendFormat": "5xx Error %"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "orange", "value": 1 },
+              { "color": "red", "value": 5 }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 4,
+      "title": "HTTP 4xx Requests/sec",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 9 },
+      "datasource": { "type": "prometheus", "uid": "ffzu77r9cglc0e" },
+      "targets": [
+        {
+          "expr": "sum(rate(http_requests_total{job=\"QuizForge\", status_code=~\"4..\"}[5m]))",
+          "legendFormat": "4xx Rate"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "color": { "fixedColor": "orange", "mode": "fixed" },
+          "custom": { "drawStyle": "line" }
+        }
+      }
+    },
+    {
+      "id": 5,
+      "title": "HTTP 5xx Requests/sec",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 9 },
+      "datasource": { "type": "prometheus", "uid": "ffzu77r9cglc0e" },
+      "targets": [
+        {
+          "expr": "sum(rate(http_requests_total{job=\"QuizForge\", status_code=~\"5..\"}[5m]))",
+          "legendFormat": "5xx Rate"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "color": { "fixedColor": "red", "mode": "fixed" },
+          "custom": { "drawStyle": "line" }
+        }
+      }
+    },
+    {
+      "id": 6,
+      "title": "HTTP P95 Latency by Route",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 9 },
+      "datasource": { "type": "prometheus", "uid": "ffzu77r9cglc0e" },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket{job=\"QuizForge\"}[5m])) by (le, route)) * 1000",
+          "legendFormat": "{{route}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "custom": { "drawStyle": "line" }
+        }
+      }
+    },
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 17 },
+      "id": 200,
+      "title": "WebSocket Metrics",
+      "type": "row"
+    },
+    {
+      "id": 7,
+      "title": "WebSocket Active Connections",
+      "type": "stat",
+      "gridPos": { "h": 8, "w": 6, "x": 0, "y": 18 },
+      "datasource": { "type": "prometheus", "uid": "ffzu77r9cglc0e" },
+      "targets": [
+        {
+          "expr": "websocket_active_connections{job=\"QuizForge\"}",
+          "legendFormat": "Active Connections"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": { "fixedColor": "blue", "mode": "fixed" }
+        }
+      }
+    },
+    {
+      "id": 8,
+      "title": "WebSocket Messages/sec",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 6, "x": 6, "y": 18 },
+      "datasource": { "type": "prometheus", "uid": "ffzu77r9cglc0e" },
+      "targets": [
+        {
+          "expr": "sum(rate(websocket_messages_total{job=\"QuizForge\"}[5m]))",
+          "legendFormat": "Total Messages/sec"
+        },
+        {
+          "expr": "sum by (event) (rate(websocket_messages_total{job=\"QuizForge\"}[5m]))",
+          "legendFormat": "{{event}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": { "drawStyle": "line" }
+        }
+      }
+    },
+    {
+      "id": 9,
+      "title": "WebSocket Message Latency (P50, P95, P99)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 6, "x": 12, "y": 18 },
+      "datasource": { "type": "prometheus", "uid": "ffzu77r9cglc0e" },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, sum(rate(websocket_message_duration_seconds_bucket{job=\"QuizForge\"}[5m])) by (le)) * 1000",
+          "legendFormat": "P50 Latency"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(websocket_message_duration_seconds_bucket{job=\"QuizForge\"}[5m])) by (le)) * 1000",
+          "legendFormat": "P95 Latency"
+        },
+        {
+          "expr": "histogram_quantile(0.99, sum(rate(websocket_message_duration_seconds_bucket{job=\"QuizForge\"}[5m])) by (le)) * 1000",
+          "legendFormat": "P99 Latency"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "custom": { "drawStyle": "line" }
+        }
+      }
+    },
+    {
+      "id": 10,
+      "title": "WebSocket Errors/sec",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 6, "x": 18, "y": 18 },
+      "datasource": { "type": "prometheus", "uid": "ffzu77r9cglc0e" },
+      "targets": [
+        {
+          "expr": "sum(rate(websocket_errors_total{job=\"QuizForge\"}[5m]))",
+          "legendFormat": "Total Errors/sec"
+        },
+        {
+          "expr": "sum by (event, error_type) (rate(websocket_errors_total{job=\"QuizForge\"}[5m]))",
+          "legendFormat": "{{event}} - {{error_type}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": { "fixedColor": "red", "mode": "fixed" },
+          "custom": { "drawStyle": "line" }
+        }
+      }
+    }
+  ],
+  "schemaVersion": 39,
+  "style": "dark",
+  "tags": ["quizforge", "observability"],
+  "time": { "from": "now-15m", "to": "now" },
+  "timepicker": {
+    "refresh_intervals": ["5s", "10s", "30s", "1m", "5m"]
+  },
+  "timezone": "browser",
+  "title": "QuizForge Observability",
+  "uid": "quizforge-observability",
+  "version": 1
+}
