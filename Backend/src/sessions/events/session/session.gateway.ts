@@ -47,6 +47,7 @@ export class SessionGateway
   constructor(
     private readonly sessionsService: SessionsService,
     private readonly answerSubmissionService: AnswerSubmissionService,
+    @Optional() private readonly wsJwtGuard?: WsJwtGuard,
     @Optional() private readonly metrics?: MetricsService,
   ) {}
 
@@ -57,6 +58,11 @@ export class SessionGateway
         .labels('socket', 'connection_error')
         .inc();
     });
+
+    // Authenticate at HTTP handshake connection time to avoid per-message crypto overhead
+    if (this.wsJwtGuard) {
+      this.wsJwtGuard.authenticateClient(client);
+    }
   }
 
   private async recordWsMetric<T>(
@@ -153,6 +159,10 @@ export class SessionGateway
 
         if (quizPayload) {
           client.emit('quiz_started', quizPayload);
+          if (!isCreator && quizPayload.questions?.[0]?.questionId) {
+            (client as any).expectedQuestionId =
+              quizPayload.questions[0].questionId;
+          }
         }
 
         return {
@@ -194,7 +204,9 @@ export class SessionGateway
     },
   ) {
     return this.recordWsMetric('submitAnswer', async () => {
-      const result = await this.submitAnswer(client, data);
+      const result = await this.submitAnswer(client, data, {
+        returnNextQuestion: false,
+      });
       return result.error
         ? this.socketError(
             result.statusCode ?? HttpStatus.BAD_REQUEST,
@@ -218,7 +230,9 @@ export class SessionGateway
     },
   ) {
     return this.recordWsMetric('submitAnswerAndGetNext', async () => {
-      const result = await this.submitAnswer(client, data);
+      const result = await this.submitAnswer(client, data, {
+        returnNextQuestion: true,
+      });
       return result.error
         ? this.socketError(
             result.statusCode ?? HttpStatus.BAD_REQUEST,
@@ -234,13 +248,16 @@ export class SessionGateway
   }
 
   private async submitAnswer(
-    client: Socket & { user?: { userId: string } },
+    client: Socket & {
+      user?: { userId: string; name?: string; email?: string };
+    },
     data: {
       sessionId: string;
       questionId: string;
       response: string;
       timeTakenSecs: number;
     },
+    options?: { returnNextQuestion?: boolean },
   ): Promise<{
     error?: string;
     statusCode?: number;
@@ -255,10 +272,30 @@ export class SessionGateway
       };
     }
     try {
-      return await this.answerSubmissionService.submit({
-        ...data,
-        userId: client.user.userId,
-      });
+      const userName =
+        client.user.name ||
+        (client.user.email ? client.user.email.split('@')[0] : undefined);
+      const result = await this.answerSubmissionService.submit(
+        {
+          ...data,
+          userId: client.user.userId,
+          userName,
+        },
+        {
+          ...options,
+          expectedQuestionId: (client as any).expectedQuestionId,
+        },
+      );
+
+      if (result.nextQuestion && (result.nextQuestion as any).questionId) {
+        (client as any).expectedQuestionId = (
+          result.nextQuestion as any
+        ).questionId;
+      } else {
+        (client as any).expectedQuestionId = undefined;
+      }
+
+      return result;
     } catch (error) {
       return {
         error:
@@ -299,6 +336,12 @@ export class SessionGateway
         data.sessionId,
         actualUserId,
       );
+
+      if (nextQuestion && (nextQuestion as any).questionId) {
+        (client as any).expectedQuestionId = (nextQuestion as any).questionId;
+      } else {
+        (client as any).expectedQuestionId = undefined;
+      }
 
       return { success: true, nextQuestion };
     });
@@ -342,6 +385,21 @@ export class SessionGateway
         questions: event.questions.slice(0, 1),
       });
     this.server.to(teacherRoom).emit('quiz_started', event);
+
+    const firstQuestionId = event.questions?.[0]?.questionId;
+    if (firstQuestionId) {
+      const roomSockets = (this.server as any)?.sockets?.adapter?.rooms?.get?.(
+        room,
+      );
+      if (roomSockets) {
+        for (const socketId of roomSockets) {
+          const s = (this.server as any)?.sockets?.sockets?.get?.(socketId);
+          if (s) {
+            s.expectedQuestionId = firstQuestionId;
+          }
+        }
+      }
+    }
   }
 
   answerSubmitted(sessionId: string, event: AnswerSubmittedEvent): void {
@@ -362,9 +420,16 @@ export class SessionGateway
 
   private async broadcastParticipantCount(sessionId: string) {
     const roomName = `session_${sessionId}`;
-    const sockets = await this.server.in(roomName).fetchSockets();
+    const adapterRoom = (this.server as any)?.sockets?.adapter?.rooms?.get(
+      roomName,
+    );
+    const count =
+      typeof adapterRoom?.size === 'number'
+        ? adapterRoom.size
+        : (await this.server.in(roomName).fetchSockets()).length;
+
     this.broadcastToSession(sessionId, 'participant_count_updated', {
-      count: sockets.length,
+      count,
     });
   }
 

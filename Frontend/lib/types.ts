@@ -102,11 +102,12 @@ export interface QuizSession {
 // ─── AI GENERATED QUIZ ──────────────────────────────────────
 
 export interface AiQuizQuestion {
-  title: string;
-  options: string[];
-  correctAnswer: string;
-  points: number;
-  type: string; // always "MULTIPLE_CHOICE"
+  id: number;
+  question: string;
+  options: { A: string; B: string; C: string; D: string };
+  correctAnswer: 'A' | 'B' | 'C' | 'D';
+  explanation: string;
+  source: 'teacher_notes' | 'general_knowledge';
 }
 
 export interface GeneratedQuiz {
@@ -198,7 +199,8 @@ export interface ScheduleSessionDto {
 }
 
 export interface GenerateQuizDto {
-  topic: string;
+  topic?: string;
   numQuestions?: number;
   difficulty?: QuizDifficulty;
+  file?: File;
 }

@@ -69,6 +69,6 @@ export class SessionsController {
     @CurrentUser() user: any,
     @Param('sessionId') sessionId: string,
   ) {
-    return this.sessionsService.getMyResults(user.userId, sessionId);
+    return this.sessionsService.getMyResults(user.userId, sessionId, user.role);
   }
 }

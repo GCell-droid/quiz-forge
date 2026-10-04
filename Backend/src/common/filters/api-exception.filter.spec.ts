@@ -1,4 +1,8 @@
-import { ArgumentsHost, BadRequestException, ConflictException } from '@nestjs/common';
+import {
+  ArgumentsHost,
+  BadRequestException,
+  ConflictException,
+} from '@nestjs/common';
 import { ApiExceptionFilter, ApiErrorResponse } from './api-exception.filter';
 
 describe('ApiExceptionFilter', () => {
@@ -31,7 +35,10 @@ describe('ApiExceptionFilter', () => {
   });
 
   it('does not expose validation internals or submitted values', () => {
-    filter.catch(new BadRequestException(['password must be secret-value']), host);
+    filter.catch(
+      new BadRequestException(['password must be secret-value']),
+      host,
+    );
     expect(json.mock.calls[0][0]).toMatchObject({
       statusCode: 400,
       message: 'Please check the submitted fields',

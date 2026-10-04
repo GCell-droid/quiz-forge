@@ -77,8 +77,8 @@ export class QuizzesService {
     quizId: string,
     data: CreateQuestionDto,
   ) {
-    const quiz = await this.requireOwnedQuiz(userId, quizId);
-    return this.quizzes.addQuestion(quiz, data);
+    await this.assertQuizOwner(userId, quizId);
+    return this.quizzes.addQuestion({ quizId } as any, data);
   }
 
   async updateQuizQuestion(

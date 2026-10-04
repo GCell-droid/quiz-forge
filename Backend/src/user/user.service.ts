@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+} from '@nestjs/common';
 import { UserRepository } from '../common/repositories/user.repository';
 import bcrypt from 'bcrypt';
 import { UpdateProfileDto, ChangePasswordDto } from './dto/user.dto';
@@ -46,10 +50,15 @@ export class UserService {
 
     // Google OAuth users don't have a traditional password
     if (user.oauthProvider === 'google' || !user.passwordHash) {
-      throw new BadRequestException('Cannot change password for OAuth accounts.');
+      throw new BadRequestException(
+        'Cannot change password for OAuth accounts.',
+      );
     }
 
-    const isPasswordValid = await bcrypt.compare(dto.currentPassword, user.passwordHash);
+    const isPasswordValid = await bcrypt.compare(
+      dto.currentPassword,
+      user.passwordHash,
+    );
     if (!isPasswordValid) {
       throw new BadRequestException('Invalid current password.');
     }

@@ -1,4 +1,13 @@
-import { IsString, IsNotEmpty, IsOptional, IsEnum, IsArray, ValidateNested, ArrayNotEmpty, ArrayMaxSize } from 'class-validator';
+import {
+  IsString,
+  IsNotEmpty,
+  IsOptional,
+  IsEnum,
+  IsArray,
+  ValidateNested,
+  ArrayNotEmpty,
+  ArrayMaxSize,
+} from 'class-validator';
 import { Type } from 'class-transformer';
 import { BundleVisibility } from '../entities/question-bundle.entity/question-bundle.entity';
 import { CreateQuestionDto } from './question.dto';

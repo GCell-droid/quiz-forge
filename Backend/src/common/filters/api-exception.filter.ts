@@ -30,7 +30,13 @@ export class ApiExceptionFilter implements ExceptionFilter {
 
     if (statusCode >= 500) {
       const name = exception instanceof Error ? exception.name : 'UnknownError';
-      this.logger.error(`${body.requestId}: ${name} on ${request.method} ${request.path}`);
+      const message =
+        exception instanceof Error ? exception.message : String(exception);
+      const stack = exception instanceof Error ? exception.stack : undefined;
+      this.logger.error(
+        `${body.requestId}: ${name} on ${request.method} ${request.path} - ${message}`,
+        stack,
+      );
     }
 
     response.setHeader('X-Request-Id', body.requestId);
@@ -49,12 +55,16 @@ export class ApiExceptionFilter implements ExceptionFilter {
     if (!(exception instanceof HttpException)) return 'Request failed';
     const response = exception.getResponse();
     if (typeof response === 'string') return response;
-    if (typeof response === 'object' && response !== null && 'message' in response) {
+    if (
+      typeof response === 'object' &&
+      response !== null &&
+      'message' in response
+    ) {
       const message = response.message;
       if (typeof message === 'string') return message;
     }
     return statusCode === HttpStatus.BAD_REQUEST
       ? 'Please check the submitted fields'
-      : STATUS_CODES[statusCode] ?? 'Request failed';
+      : (STATUS_CODES[statusCode] ?? 'Request failed');
   }
 }

@@ -19,7 +19,11 @@ async function bootstrap() {
     const legacyRoute = resolveLegacyRoute(req.method, path);
     if (legacyRoute) {
       req.method = legacyRoute.method;
-      req.url = legacyRoute.path + (query ? `${legacyRoute.path.includes('?') ? '&' : '?'}${query.slice(1)}` : '');
+      req.url =
+        legacyRoute.path +
+        (query
+          ? `${legacyRoute.path.includes('?') ? '&' : '?'}${query.slice(1)}`
+          : '');
     }
     next();
   });
@@ -31,7 +35,10 @@ async function bootstrap() {
   }
 
   app.enableCors({
-    origin: [process.env.FRONTEND_URL || 'http://localhost:3000', 'http://localhost:3000'],
+    origin: [
+      process.env.FRONTEND_URL || 'http://localhost:3000',
+      'http://localhost:3000',
+    ],
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
     credentials: true,
   });

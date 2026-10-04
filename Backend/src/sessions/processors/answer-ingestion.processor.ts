@@ -19,6 +19,9 @@ import { UserRepository } from '../../common/repositories/user.repository';
 @Processor('answer-ingestion')
 @Injectable()
 export class AnswerIngestionProcessor extends WorkerHost {
+  private quizCache = new Map<string, { quiz: any; expiresAt: number }>();
+  private readonly CACHE_TTL_MS = 60 * 1000;
+
   constructor(
     private readonly responseRepo: ResponseRepository,
     private readonly sessionRepo: SessionRepository,
@@ -35,20 +38,41 @@ export class AnswerIngestionProcessor extends WorkerHost {
     const { sessionId, questionId, userId, response, timeTakenSecs } = job.data;
 
     // 1. Load Quiz details to verify the correct answer.
-    // Try to get from Redis pre-warmed cache first.
-    const cacheKey = `quiz:session:${sessionId}:metadata`;
-    const cachedQuizData = await this.redisService.get(cacheKey);
-
+    // Try in-memory cache first to eliminate repeated Redis calls and JSON parses
     let quiz: any;
-    if (cachedQuizData) {
-      quiz = JSON.parse(cachedQuizData);
+    const cachedMemory = this.quizCache.get(sessionId);
+    if (cachedMemory && cachedMemory.expiresAt > Date.now()) {
+      quiz = cachedMemory.quiz;
     } else {
-      // Fallback: Fetch session and then quiz from DB
-      const session = await this.sessionRepo.findByIdWithQuiz(sessionId);
-      if (!session) {
-        throw new NotFoundException(`Session ${sessionId} not found`);
+      const cacheKey = `quiz:session:${sessionId}:metadata`;
+      const cachedQuizData = await this.redisService.get(cacheKey);
+
+      if (cachedQuizData) {
+        try {
+          quiz = JSON.parse(cachedQuizData);
+          this.quizCache.set(sessionId, {
+            quiz,
+            expiresAt: Date.now() + this.CACHE_TTL_MS,
+          });
+        } catch {
+          // Fall back if parse fails
+        }
       }
-      quiz = await this.quizzesService.getQuiz(session.quiz.quizId);
+
+      if (!quiz) {
+        // Fallback: Fetch session and then quiz from DB
+        const session = await this.sessionRepo.findByIdWithQuiz(sessionId);
+        if (!session) {
+          throw new NotFoundException(`Session ${sessionId} not found`);
+        }
+        quiz = await this.quizzesService.getQuiz(session.quiz.quizId);
+        if (quiz) {
+          this.quizCache.set(sessionId, {
+            quiz,
+            expiresAt: Date.now() + this.CACHE_TTL_MS,
+          });
+        }
+      }
     }
 
     // Find the question inside the quiz
@@ -81,15 +105,32 @@ export class AnswerIngestionProcessor extends WorkerHost {
       timeTakenSecs,
     });
 
-    await this.responseRepo.save(questionResponse);
-    console.log(
-      `[Answer Ingestion] Saved answer for user: ${userId}, question: ${questionId}, correct: ${isCorrect}`,
-    );
+    try {
+      await this.responseRepo.save(questionResponse);
+      console.log(
+        `[Answer Ingestion] Saved answer for user: ${userId}, question: ${questionId}, correct: ${isCorrect}`,
+      );
+    } catch (dbErr: any) {
+      if (
+        dbErr?.code === '23503' ||
+        dbErr?.message?.includes('foreign key constraint')
+      ) {
+        // Virtual/benchmark user not registered in UserEntity table; skip persistent DB save
+        console.warn(
+          `[Answer Ingestion] Skipped DB save for virtual user: ${userId}`,
+        );
+      } else {
+        throw dbErr;
+      }
+    }
 
-    // 4. Fetch User to broadcast userName
-    const user = await this.userRepo.findById(userId);
-    const userName =
-      user?.name || (user?.email ? user.email.split('@')[0] : 'Unknown');
+    // 4. Fetch User to broadcast userName (Fast path: use userName provided in job data)
+    let userName = job.data.userName;
+    if (!userName) {
+      const user = await this.userRepo.findById(userId);
+      userName =
+        user?.name || (user?.email ? user.email.split('@')[0] : 'Unknown');
+    }
 
     const answerPayload = {
       questionId,

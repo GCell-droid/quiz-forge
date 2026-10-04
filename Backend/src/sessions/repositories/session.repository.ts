@@ -1,7 +1,10 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { QuizSession } from '../entities/quiz-session.entity/quiz-session.entity';
+import {
+  QuizSession,
+  SessionStatus,
+} from '../entities/quiz-session.entity/quiz-session.entity';
 import { Page, PageOptions, toPage } from '../../common/pagination';
 
 export function isSessionUuid(reference: string): boolean {
@@ -67,5 +70,12 @@ export class SessionRepository {
 
   save(session: QuizSession): Promise<QuizSession> {
     return this.sessions.save(session);
+  }
+
+  async markCompleted(sessionId: string): Promise<void> {
+    await this.sessions.update(
+      { sessionId },
+      { status: SessionStatus.COMPLETED, endTime: new Date() },
+    );
   }
 }

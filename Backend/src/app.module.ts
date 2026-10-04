@@ -4,6 +4,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { AuthModule } from './auth/auth.module';
 import { GeminiModule } from './gemini/gemini.module';
+import { TeacherNotes1791072000000 } from './gemini/rag/teacher-notes.migration';
 import { ThrottlerModule } from '@nestjs/throttler';
 import { QuizzesModule } from './quizzes/quizzes.module';
 import { SessionsModule } from './sessions/sessions.module';
@@ -34,6 +35,8 @@ import { MetricsMiddleware } from './metrics/metrics.middleware';
         rejectUnauthorized: false,
       },
       autoLoadEntities: true,
+      migrations: [TeacherNotes1791072000000],
+      migrationsRun: true,
       extra: {
         max: 10,
         idleTimeoutMillis: 300000,
@@ -51,13 +54,19 @@ import { MetricsMiddleware } from './metrics/metrics.middleware';
           configService.get<string>('REDIS_URL') ||
           'redis://localhost:6379';
         const parsedUrl = new URL(redisUrlString);
+        const isTls = parsedUrl.protocol === 'rediss:';
         return {
           connection: {
             host: parsedUrl.hostname,
             port: parseInt(parsedUrl.port, 10) || 6379,
+            username: parsedUrl.username
+              ? decodeURIComponent(parsedUrl.username)
+              : undefined,
             password: parsedUrl.password
               ? decodeURIComponent(parsedUrl.password)
               : undefined,
+            tls: isTls ? { rejectUnauthorized: false } : undefined,
+            maxRetriesPerRequest: null,
           },
         };
       },

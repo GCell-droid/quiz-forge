@@ -26,8 +26,21 @@ export class WsJwtGuard implements CanActivate {
     const client: Socket = ws.getClient<Socket>();
     const pattern = ws.getPattern?.() || 'auth';
 
+    // Fast-path: client already authenticated via HTTP connection handshake
+    if ((client as any).user?.userId) {
+      return true;
+    }
+
+    return this.authenticateClient(client, pattern);
+  }
+
+  public authenticateClient(client: Socket, pattern: string = 'auth'): boolean {
+    if ((client as any).user?.userId) {
+      return true;
+    }
+
     try {
-      const cookieHeader = client.handshake.headers.cookie;
+      const cookieHeader = client.handshake.headers?.cookie;
       if (!cookieHeader) {
         this.metrics?.websocketErrorsTotal
           .labels(pattern, 'unauthorized')
@@ -67,11 +80,12 @@ export class WsJwtGuard implements CanActivate {
       const jwtSecret = this.configService.get<string>('JWT_SECRET');
       const payload = this.jwtService.verify(token, { secret: jwtSecret });
 
-      // Attach user object to socket client
+      // Attach user object to socket client so all subsequent guarded events take the instant fast-path
       (client as any).user = {
         userId: payload.sub,
         email: payload.email,
         role: payload.role,
+        name: payload.name,
       };
 
       return true;

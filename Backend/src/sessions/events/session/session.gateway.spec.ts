@@ -86,10 +86,9 @@ describe('SessionGateway event publishing', () => {
       to: jest.fn().mockReturnValue({ emit: jest.fn() }),
     } as never;
 
-    const result = await gateway.handleJoinSession(
-      mockClient as never,
-      { sessionId: '3LQ4SV' },
-    );
+    const result: any = await gateway.handleJoinSession(mockClient as never, {
+      sessionId: '3LQ4SV',
+    });
 
     expect(result.success).toBe(true);
     expect(result.data.quizPayload).toBeDefined();
@@ -102,4 +101,3 @@ describe('SessionGateway event publishing', () => {
     );
   });
 });
-

@@ -3,398 +3,362 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { ArrowLeft, Save, Sparkles, HardDrive, FileText } from "lucide-react";
 import api from "@/lib/api";
 import { getApiErrorMessage } from "@/lib/api-error";
 import { QuizDifficulty, QuestionType } from "@/lib/enums";
-import { AiQuizQuestion, GeneratedQuiz } from "@/lib/types";
+import type { GeneratedQuiz, CreateQuestionDto } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import {
-  Field,
-  FieldGroup,
-  FieldLabel,
-  FieldDescription,
-} from "@/components/ui/field";
-import { Badge } from "@/components/ui/badge";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Slider } from "@/components/ui/slider";
-import { Loading } from "@/components/shared/loading";
 import { ErrorMessage } from "@/components/shared/error-message";
 import { TagInput } from "@/components/shared/tag-input";
 import {
-  ArrowLeft,
-  Sparkles,
-  Save,
-  Trash2,
-  Check,
-  RotateCcw,
-} from "lucide-react";
+  QuestionEditor,
+  type EditableQuestion,
+} from "@/components/shared/question-editor";
+import { type TeacherNote } from "@/components/study-materials/notes-library";
+import { NotesStorageModal } from "@/components/study-materials/notes-storage-modal";
+import { Badge } from "@/components/ui/badge";
+import { GenerationProgress } from "@/components/study-materials/generation-progress";
 
 export default function AIGeneratePage() {
   const router = useRouter();
-
-  // Step 1: Generate
+  const [selectedNote, setSelectedNote] = useState<TeacherNote | null>(null);
+  const [showStorageModal, setShowStorageModal] = useState(false);
+  const [notesBusy, setNotesBusy] = useState(false);
   const [topic, setTopic] = useState("");
   const [numQuestions, setNumQuestions] = useState(5);
-  const [difficulty, setDifficulty] = useState<QuizDifficulty>(
-    QuizDifficulty.MEDIUM,
-  );
+  const [difficulty, setDifficulty] = useState(QuizDifficulty.MEDIUM);
+  const [gradeLevel, setGradeLevel] = useState("");
   const [generating, setGenerating] = useState(false);
-  const [genError, setGenError] = useState<string | null>(null);
-
-  // Step 2: Review
-  const [generated, setGenerated] = useState<GeneratedQuiz | null>(null);
-  const [editedQuestions, setEditedQuestions] = useState<AiQuizQuestion[]>([]);
-
-  // Step 3: Save
-  const [quizTitle, setQuizTitle] = useState("");
-  const [quizDescription, setQuizDescription] = useState("");
-  const [quizTags, setQuizTags] = useState<string[]>([]);
+  const [generated, setGenerated] = useState(false);
+  const [questions, setQuestions] = useState<EditableQuestion[]>([]);
+  const [title, setTitle] = useState("");
+  const [description, setDescription] = useState("");
+  const [tags, setTags] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
-  const [saveError, setSaveError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
-  const handleGenerate = async () => {
+  async function generate() {
+    setGenerating(true);
+    setError(null);
     try {
-      setGenerating(true);
-      setGenError(null);
-      const res = await api.post("/quiz-generations", {
-        topic,
-        numQuestions,
+      const { data } = await api.post<GeneratedQuiz>("/quiz-generations", {
+        topic: topic.trim() || `Key concepts from ${selectedNote?.fileName}`,
+        questionCount: numQuestions,
         difficulty,
+        ...(gradeLevel.trim() ? { gradeLevel: gradeLevel.trim() } : {}),
+        ...(selectedNote ? { fileId: selectedNote.fileId } : {}),
       });
-      const data: GeneratedQuiz = res.data;
-      setGenerated(data);
-      setEditedQuestions([...data.questions]);
-      setQuizTitle(data.title);
-      setQuizDescription(data.description);
+      setQuestions(
+        data.questions.map((question) => ({
+          title: question.question,
+          options: [
+            question.options.A,
+            question.options.B,
+            question.options.C,
+            question.options.D,
+          ],
+          correctAnswer: question.options[question.correctAnswer],
+          type: QuestionType.MULTIPLE_CHOICE,
+          points: 1,
+          displayOrder: question.id,
+          source: question.source,
+          explanation: question.explanation,
+        })),
+      );
+      setTitle(data.title);
+      setDescription(data.description);
+      setGenerated(true);
     } catch (err) {
-      setGenError(getApiErrorMessage(err, "Failed to generate quiz"));
+      setError(
+        getApiErrorMessage(
+          err,
+          "Your quiz could not be generated. Please try again.",
+        ),
+      );
     } finally {
       setGenerating(false);
     }
-  };
+  }
 
-  const removeQuestion = (index: number) => {
-    setEditedQuestions((prev) => prev.filter((_, i) => i !== index));
-  };
-
-  const updateQuestion = (index: number, updates: Partial<AiQuizQuestion>) => {
-    setEditedQuestions((prev) =>
-      prev.map((q, i) => (i === index ? { ...q, ...updates } : q)),
-    );
-  };
-
-  const handleSave = async () => {
-    if (editedQuestions.length === 0) {
-      setSaveError("Add at least one question");
-      return;
-    }
-
+  async function save() {
+    setSaving(true);
+    setError(null);
     try {
-      setSaving(true);
-      setSaveError(null);
-
-      // Transform AI format to Quiz DTO format
-      const transformedQuestions = editedQuestions.map((q, i) => ({
-        ...q,
-        type: q.type as QuestionType,
+      const payload: CreateQuestionDto[] = questions.map((question, i) => ({
+        title: question.title,
+        type: question.type,
+        options: question.options,
+        correctAnswer: question.correctAnswer,
+        points: question.points,
         displayOrder: i + 1,
       }));
-
-      const res = await api.post("/quizzes", {
-        title: quizTitle,
-        description: quizDescription || undefined,
-        tags: quizTags.length > 0 ? quizTags : undefined,
-        questions: transformedQuestions,
+      const { data } = await api.post<{ quizId: string }>("/quizzes", {
+        title,
+        description,
+        tags,
+        questions: payload,
       });
-
-      router.push(`/quiz/${res.data.quizId}`);
+      router.push(`/quiz/${data.quizId}`);
     } catch (err) {
-      setSaveError(getApiErrorMessage(err, "Failed to save quiz"));
+      setError(getApiErrorMessage(err, "Your quiz could not be saved."));
     } finally {
       setSaving(false);
     }
-  };
-
-  // Step 1: Generate Form
-  if (!generated) {
-    return (
-      <div className="mx-auto max-w-2xl px-4 py-8 sm:px-6 lg:px-8">
-        <div className="mb-6">
-          <Link
-            href="/dashboard"
-            className="mb-4 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors"
-          >
-            <ArrowLeft className="h-4 w-4" />
-            Back to Dashboard
-          </Link>
-          <h1 className="text-3xl font-bold tracking-tight font-heading">
-            AI Quiz Generator
-          </h1>
-          <p className="mt-1 text-muted-foreground">
-            Describe a topic and let Gemini AI create quiz questions for you
-          </p>
-        </div>
-
-        {genError && <ErrorMessage message={genError} className="mb-6" />}
-
-        <Card className="border-border/50">
-          <CardHeader>
-            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-chart-3/10">
-              <Sparkles className="h-6 w-6 text-chart-3" />
-            </div>
-            <CardTitle className="font-heading">Generate Questions</CardTitle>
-            <CardDescription>
-              Enter your topic details and AI will generate quiz questions
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <FieldGroup>
-              <Field>
-                <FieldLabel>Topic</FieldLabel>
-                <FieldDescription>
-                  Describe the topic in detail for better results (max 2000 chars)
-                </FieldDescription>
-                <textarea
-                  value={topic}
-                  onChange={(e) => setTopic(e.target.value)}
-                  maxLength={2000}
-                  rows={4}
-                  placeholder="e.g., React Hooks and State Management — including useState, useEffect, useContext, custom hooks, and common patterns"
-                  required
-                  className="flex w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                />
-                <p className="text-xs text-muted-foreground text-right">
-                  {topic.length}/2000
-                </p>
-              </Field>
-
-              <Field>
-                <FieldLabel>Number of Questions: {numQuestions}</FieldLabel>
-                <Slider
-                  value={[numQuestions]}
-                  onValueChange={([v]) => setNumQuestions(v)}
-                  min={1}
-                  max={50}
-                  step={1}
-                />
-                <div className="flex justify-between text-xs text-muted-foreground">
-                  <span>1</span>
-                  <span>50</span>
-                </div>
-              </Field>
-
-              <Field>
-                <FieldLabel>Difficulty</FieldLabel>
-                <div className="flex gap-2">
-                  {[
-                    { value: QuizDifficulty.EASY, label: "Easy", color: "bg-chart-1/10 text-chart-1" },
-                    { value: QuizDifficulty.MEDIUM, label: "Medium", color: "bg-chart-4/10 text-chart-4" },
-                    { value: QuizDifficulty.HARD, label: "Hard", color: "bg-destructive/10 text-destructive" },
-                  ].map((d) => (
-                    <button
-                      key={d.value}
-                      type="button"
-                      onClick={() => setDifficulty(d.value)}
-                      className={`flex-1 rounded-lg border px-4 py-2.5 text-sm font-medium transition-all ${
-                        difficulty === d.value
-                          ? `border-transparent ${d.color} ring-2 ring-ring`
-                          : "border-border text-muted-foreground hover:bg-muted"
-                      }`}
-                    >
-                      {d.label}
-                    </button>
-                  ))}
-                </div>
-              </Field>
-
-              <Button
-                onClick={handleGenerate}
-                disabled={generating || !topic.trim()}
-                className="w-full"
-                size="lg"
-              >
-                {generating ? (
-                  <>
-                    <Loading className="mr-2" />
-                    Generating... (this may take 5-15 seconds)
-                  </>
-                ) : (
-                  <>
-                    <Sparkles className="mr-2 h-4 w-4" />
-                    Generate Questions
-                  </>
-                )}
-              </Button>
-            </FieldGroup>
-          </CardContent>
-        </Card>
-      </div>
-    );
   }
 
-  // Step 2 & 3: Review + Save
   return (
-    <div className="mx-auto max-w-3xl px-4 py-8 sm:px-6 lg:px-8">
-      <div className="mb-6">
-        <button
-          onClick={() => {
-            setGenerated(null);
-            setEditedQuestions([]);
-          }}
-          className="mb-4 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors"
+    <div className="mx-auto max-w-3xl space-y-6 px-4 py-8 sm:px-6 lg:px-8">
+      <div>
+        <Link
+          href="/dashboard"
+          className="mb-4 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
         >
-          <RotateCcw className="h-4 w-4" />
-          Generate Again
-        </button>
-        <h1 className="text-3xl font-bold tracking-tight font-heading">
-          Review Generated Questions
+          <ArrowLeft className="h-4 w-4" />
+          Back to Dashboard
+        </Link>
+        <h1 className="font-heading text-3xl font-bold tracking-tight">
+          {generated ? "Review your quiz" : "Create a quiz"}
         </h1>
-        <p className="mt-1 text-muted-foreground">
-          Edit, remove, or reorder questions before saving as a quiz
+        <p className="mt-2 text-muted-foreground">
+          {generated
+            ? "Review the answers and explanations before sharing with your students."
+            : "Turn your study materials and teaching topics into thoughtful questions."}
         </p>
       </div>
-
-      {saveError && <ErrorMessage message={saveError} className="mb-6" />}
-
-      {/* Quiz metadata */}
-      <Card className="mb-6 border-border/50">
-        <CardHeader>
-          <CardTitle className="font-heading">Quiz Details</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <FieldGroup>
-            <Field>
-              <FieldLabel>Title</FieldLabel>
-              <Input
-                value={quizTitle}
-                onChange={(e) => setQuizTitle(e.target.value)}
-                required
-              />
-            </Field>
-            <Field>
-              <FieldLabel>Description</FieldLabel>
-              <Input
-                value={quizDescription}
-                onChange={(e) => setQuizDescription(e.target.value)}
-              />
-            </Field>
-            <Field>
-              <FieldLabel>Tags</FieldLabel>
-              <TagInput tags={quizTags} onChange={setQuizTags} maxTags={5} />
-            </Field>
-          </FieldGroup>
-        </CardContent>
-      </Card>
-
-      {/* Questions */}
-      <div className="mb-4 flex items-center justify-between">
-        <h2 className="text-lg font-semibold font-heading">
-          Questions ({editedQuestions.length})
-        </h2>
-      </div>
-
-      <div className="space-y-4">
-        {editedQuestions.map((q, qi) => (
-          <Card key={qi} className="group border-border/50">
-            <CardContent className="pt-5">
-              <div className="flex items-start justify-between gap-4">
-                <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-muted text-sm font-semibold text-muted-foreground">
-                  {qi + 1}
-                </div>
-                <div className="flex-1 min-w-0 space-y-3">
-                  <Input
-                    value={q.title}
-                    onChange={(e) =>
-                      updateQuestion(qi, { title: e.target.value })
-                    }
-                    className="font-medium"
-                  />
-                  <div className="grid grid-cols-2 gap-2">
-                    {q.options.map((opt, oi) => {
-                      const isSelected = 
-                        (q.correctAnswer === opt && opt !== "") || 
-                        (opt === "" && q.correctAnswer === `Option ${oi + 1}`);
-
-                      return (
-                        <div key={oi} className="flex items-center gap-2">
-                          <button
-                            type="button"
-                            onClick={() =>
-                              updateQuestion(qi, { correctAnswer: opt || `Option ${oi + 1}` })
-                            }
-                            className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full border-2 text-xs font-medium transition-all ${
-                              isSelected
-                                ? "border-primary bg-primary text-primary-foreground"
-                                : "border-muted-foreground/30 text-muted-foreground"
-                            }`}
-                          >
-                            {isSelected ? (
-                              <Check className="h-3 w-3" />
-                            ) : (
-                              String.fromCharCode(65 + oi)
-                            )}
-                          </button>
-                          <Input
-                            value={opt}
-                            onChange={(e) => {
-                              const newOpts = [...q.options];
-                              const oldOpt = newOpts[oi];
-                              newOpts[oi] = e.target.value;
-                              
-                              const updates: Partial<AiQuizQuestion> = { options: newOpts };
-                              if (q.correctAnswer === oldOpt || q.correctAnswer === `Option ${oi + 1}`) {
-                                updates.correctAnswer = e.target.value || `Option ${oi + 1}`;
-                              }
-                              updateQuestion(qi, updates);
-                            }}
-                            className="h-8 text-sm"
-                          />
-                      </div>
-                      );
-                    })}
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Badge variant="secondary" className="text-xs">
-                      {q.points} pt{q.points !== 1 ? "s" : ""}
-                    </Badge>
-                  </div>
-                </div>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => removeQuestion(qi)}
-                  className="shrink-0 opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive"
-                >
-                  <Trash2 className="h-4 w-4" />
-                </Button>
+      {error && <ErrorMessage message={error} />}
+      {!generated ? (
+        <>
+          {/* Study Materials & Storage Management Card */}
+          <Card>
+            <CardHeader className="flex-row items-center justify-between pb-3">
+              <div>
+                <CardTitle className="text-base font-semibold">Study Materials & Grounding</CardTitle>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Ground quiz questions in study notes from cloud storage, or generate from general topics.
+                </p>
               </div>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setShowStorageModal(true)}
+                disabled={generating}
+                className="shrink-0"
+              >
+                <HardDrive className="mr-1.5 h-4 w-4 text-primary" />
+                Manage Storage
+              </Button>
+            </CardHeader>
+            <CardContent>
+              {selectedNote ? (
+                <div className="flex items-center justify-between rounded-lg border border-primary/30 bg-primary/5 p-3">
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <FileText className="h-4 w-4 text-primary shrink-0" />
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-medium text-foreground">
+                        {selectedNote.fileName}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {(selectedNote.size / (1024 * 1024)).toFixed(1)} MB • Questions will be grounded strictly in this document
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="text-xs"
+                      onClick={() => setSelectedNote(null)}
+                    >
+                      Clear selection
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="text-xs"
+                      onClick={() => setShowStorageModal(true)}
+                    >
+                      Change note
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 rounded-lg border border-dashed p-3 text-xs text-muted-foreground">
+                  <div className="flex items-center gap-2">
+                    <Badge variant="secondary" className="text-[11px] font-normal shrink-0">
+                      All Saved Notes
+                    </Badge>
+                    <span>Searching across all ready notes in your storage for relevant concepts.</span>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="link"
+                    size="sm"
+                    className="text-xs p-0 h-auto self-start sm:self-auto text-primary"
+                    onClick={() => setShowStorageModal(true)}
+                  >
+                    Select specific note or manage storage →
+                  </Button>
+                </div>
+              )}
             </CardContent>
           </Card>
-        ))}
-      </div>
 
-      <div className="mt-6 flex justify-end gap-3">
-        <Button
-          variant="outline"
-          onClick={() => {
-            setGenerated(null);
-            setEditedQuestions([]);
-          }}
-        >
-          Discard & Regenerate
-        </Button>
-        <Button onClick={handleSave} disabled={saving}>
-          <Save className="mr-2 h-4 w-4" />
-          {saving ? "Saving..." : "Save as Quiz"}
-        </Button>
-      </div>
+          <NotesStorageModal
+            isOpen={showStorageModal}
+            onClose={() => setShowStorageModal(false)}
+            selectedNote={selectedNote}
+            onSelectNote={setSelectedNote}
+          />
+          <Card>
+            <CardHeader>
+              <CardTitle>Quiz details</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <form
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  void generate();
+                }}
+              >
+                <FieldGroup>
+                  <Field>
+                    <FieldLabel htmlFor="quiz-topic">
+                      {selectedNote ? "Focus topic (optional)" : "Topic"}
+                    </FieldLabel>
+                    <Input
+                      id="quiz-topic"
+                      value={topic}
+                      onChange={(event) => setTopic(event.target.value)}
+                      disabled={generating}
+                      maxLength={2000}
+                      placeholder="e.g., Photosynthesis and plant growth"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Relevant saved notes will guide your quiz questions.
+                    </p>
+                  </Field>
+                  <Field>
+                    <FieldLabel htmlFor="quiz-grade">
+                      Grade level (optional)
+                    </FieldLabel>
+                    <Input
+                      id="quiz-grade"
+                      value={gradeLevel}
+                      onChange={(event) => setGradeLevel(event.target.value)}
+                      disabled={generating}
+                      maxLength={100}
+                      placeholder="e.g., Grade 8"
+                    />
+                  </Field>
+                  <Field>
+                    <FieldLabel id="question-count-label">
+                      Number of questions: {numQuestions}
+                    </FieldLabel>
+                    <Slider
+                      aria-labelledby="question-count-label"
+                      value={[numQuestions]}
+                      onValueChange={([value]) => setNumQuestions(value)}
+                      min={1}
+                      max={50}
+                      step={1}
+                      disabled={generating}
+                    />
+                  </Field>
+                  <Field>
+                    <FieldLabel htmlFor="quiz-difficulty">
+                      Difficulty
+                    </FieldLabel>
+                    <select
+                      id="quiz-difficulty"
+                      className="h-10 rounded-md border border-input bg-background px-3 text-sm"
+                      value={difficulty}
+                      onChange={(event) =>
+                        setDifficulty(event.target.value as QuizDifficulty)
+                      }
+                      disabled={generating}
+                    >
+                      <option value={QuizDifficulty.EASY}>Easy</option>
+                      <option value={QuizDifficulty.MEDIUM}>Medium</option>
+                      <option value={QuizDifficulty.HARD}>Hard</option>
+                    </select>
+                  </Field>
+                  <Button
+                    type="submit"
+                    disabled={
+                      generating ||
+                      notesBusy ||
+                      (!selectedNote && topic.trim().length < 3)
+                    }
+                  >
+                    <Sparkles className="mr-2 h-4 w-4" />
+                    {generating ? "Preparing your quiz..." : "Generate quiz"}
+                  </Button>
+                  {generating && <GenerationProgress />}
+                </FieldGroup>
+              </form>
+            </CardContent>
+          </Card>
+        </>
+      ) : (
+        <>
+          <Card>
+            <CardContent className="pt-6">
+              <FieldGroup>
+                <Field>
+                  <FieldLabel htmlFor="quiz-title">Quiz title</FieldLabel>
+                  <Input
+                    id="quiz-title"
+                    value={title}
+                    onChange={(event) => setTitle(event.target.value)}
+                  />
+                </Field>
+                <Field>
+                  <FieldLabel htmlFor="quiz-description">
+                    Description
+                  </FieldLabel>
+                  <Input
+                    id="quiz-description"
+                    value={description}
+                    onChange={(event) => setDescription(event.target.value)}
+                  />
+                </Field>
+                <Field>
+                  <FieldLabel>Tags</FieldLabel>
+                  <TagInput tags={tags} onChange={setTags} />
+                </Field>
+              </FieldGroup>
+            </CardContent>
+          </Card>
+          <QuestionEditor questions={questions} onChange={setQuestions} />
+          <div className="flex justify-end gap-3">
+            <Button
+              variant="outline"
+              disabled={saving}
+              onClick={() => {
+                setGenerated(false);
+                setError(null);
+              }}
+            >
+              Start again
+            </Button>
+            <Button
+              disabled={saving || !title.trim() || !questions.length}
+              onClick={() => void save()}
+            >
+              <Save className="mr-2 h-4 w-4" />
+              {saving ? "Saving..." : "Save as quiz"}
+            </Button>
+          </div>
+        </>
+      )}
     </div>
   );
 }

@@ -1,4 +1,10 @@
-import { IsString, IsNotEmpty, IsOptional, IsEnum, IsInt } from 'class-validator';
+import {
+  IsString,
+  IsNotEmpty,
+  IsOptional,
+  IsEnum,
+  IsInt,
+} from 'class-validator';
 import { QuestionType } from '../entities/question.entity/question.entity';
 
 export class CreateQuestionDto {

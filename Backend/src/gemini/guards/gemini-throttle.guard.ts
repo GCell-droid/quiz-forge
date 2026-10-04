@@ -9,7 +9,7 @@ export class GeminiThrottle extends ThrottlerGuard {
   protected async getTtl(): Promise<number> {
     return Promise.resolve(60000);
   }
-  protected async throwThrottlingException(): Promise<void> {
-    throw new ThrottlerException('Too many attempts');
+  protected throwThrottlingException(): Promise<void> {
+    return Promise.reject(new ThrottlerException('Too many attempts'));
   }
 }

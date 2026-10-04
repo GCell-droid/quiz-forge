@@ -13,6 +13,7 @@ import { QuizzesService } from '../quizzes/quizzes.service';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import User from '../common/entity/user.entity';
+import { UserRole } from '../common/enums/enum';
 import { RedisService } from '../redis/redis.service';
 import {
   SessionRepository,
@@ -25,6 +26,11 @@ import { PageOptions } from '../common/pagination';
 export class SessionsService {
   private readonly PRE_WARM_OFFSET_MS = 120000; // 2 minutes
   private readonly CACHE_TTL_SECONDS = 86400; // 24 hours
+  private readonly quizMetadataCache = new Map<
+    string,
+    { quiz: any; expiresAt: number }
+  >();
+  private readonly METADATA_CACHE_TTL_MS = 60000; // 60 seconds
 
   constructor(
     private readonly sessionRepo: SessionRepository,
@@ -35,11 +41,24 @@ export class SessionsService {
     private readonly redisService: RedisService,
   ) {}
 
-  async getMyResults(userId: string, sessionIdParam: string) {
+  async getMyResults(
+    userId: string,
+    sessionIdParam: string,
+    userRole?: string,
+  ) {
     const session = await this.sessionRepo.findByReference(sessionIdParam);
 
     if (!session) {
       throw new NotFoundException('Session not found');
+    }
+
+    const isTeacher =
+      userRole === UserRole.TEACHER || session.createdBy?.uid === userId;
+
+    if (!isTeacher && session.status !== SessionStatus.COMPLETED) {
+      throw new BadRequestException(
+        'Quiz results are only available after the session has ended',
+      );
     }
 
     const sessionId = session.sessionId;
@@ -213,7 +232,7 @@ export class SessionsService {
       );
     }
 
-    let quiz = await this.quizzesService.getQuiz(session.quiz.quizId);
+    const quiz = await this.quizzesService.getQuiz(session.quiz.quizId);
     let quizPayload: any = null;
 
     if (quiz && quiz.quizQuestions) {
@@ -225,6 +244,7 @@ export class SessionsService {
           title: qq.question.title,
           type: qq.question.type,
           options: qq.question.options,
+          correctAnswer: qq.question.correctAnswer,
           points: qq.question.points,
         })),
         timeLimit: session.timeLimit,
@@ -305,7 +325,7 @@ export class SessionsService {
       );
     }
 
-    let isCreator = userId === sessionDetails.creatorId;
+    const isCreator = userId === sessionDetails.creatorId;
     let initialStatsPayload: any[] = [];
 
     if (isCreator) {
@@ -326,28 +346,47 @@ export class SessionsService {
       if (redisAnswerIds && redisAnswerIds.length > 0) {
         answeredQuestionIds = redisAnswerIds;
       } else {
-        // 2. Fallback to DB ONLY if the Redis Set is empty (e.g. cache cleared)
-        answeredQuestionIds = await this.responseRepo.findQuestionIdsForUser(
-          actualSessionId,
-          userId,
-        );
+        // 2. Fallback to DB ONLY if the Redis Set is empty and userId is a valid UUID
+        if (isSessionUuid(userId)) {
+          answeredQuestionIds = await this.responseRepo.findQuestionIdsForUser(
+            actualSessionId,
+            userId,
+          );
 
-        // Warm up the cache for next time
-        if (answeredQuestionIds.length > 0) {
-          await this.redisService.sadd(answeredSetKey, ...answeredQuestionIds);
+          // Warm up the cache for next time
+          if (answeredQuestionIds.length > 0) {
+            await this.redisService.sadd(
+              answeredSetKey,
+              ...answeredQuestionIds,
+            );
+          }
         }
       }
     }
 
     // redisStatus is already fetched concurrently above
 
-    if (sessionDetails.status === SessionStatus.COMPLETED) {
+    if (this.isSessionExpired(sessionDetails)) {
+      if (sessionDetails.status !== SessionStatus.COMPLETED) {
+        sessionDetails.status = SessionStatus.COMPLETED;
+        sessionDetails.endTime = sessionDetails.endTime || new Date();
+        await Promise.all([
+          this.redisService.del(`quiz:session:${actualSessionId}:status`),
+          this.redisService.set(
+            `quiz:session:${actualSessionId}:details`,
+            JSON.stringify(sessionDetails),
+            3600,
+          ),
+          this.sessionRepo.markCompleted(actualSessionId),
+        ]);
+      }
       return { error: 'Session has ended' };
     }
 
+    const now = Date.now();
     const hasScheduledTimePassed =
       Boolean(sessionDetails.scheduledStart) &&
-      new Date(sessionDetails.scheduledStart).getTime() <= Date.now();
+      new Date(sessionDetails.scheduledStart).getTime() <= now;
 
     const isSessionActive =
       redisStatus === SessionStatus.ACTIVE ||
@@ -360,7 +399,7 @@ export class SessionsService {
     ) {
       sessionDetails.status = SessionStatus.ACTIVE;
       if (!sessionDetails.actualStart) {
-        sessionDetails.actualStart = new Date();
+        sessionDetails.actualStart = new Date(sessionDetails.scheduledStart);
       }
       await Promise.all([
         this.redisService.set(
@@ -378,7 +417,7 @@ export class SessionsService {
 
     if (isSessionActive) {
       const cacheKey = `quiz:session:${actualSessionId}:metadata`;
-      let quizData = await this.redisService.get(cacheKey);
+      const quizData = await this.redisService.get(cacheKey);
       let quiz;
 
       if (quizData) {
@@ -404,27 +443,23 @@ export class SessionsService {
       }
 
       if (quiz && quiz.quizQuestions) {
-        let remainingTime = sessionDetails.timeLimit;
-        if (sessionDetails.actualStart) {
-          const actualStartDate =
-            typeof sessionDetails.actualStart === 'string'
-              ? new Date(sessionDetails.actualStart)
-              : sessionDetails.actualStart;
-          const elapsedSecs = Math.floor(
-            (Date.now() - actualStartDate.getTime()) / 1000,
-          );
-          remainingTime = Math.max(0, sessionDetails.timeLimit - elapsedSecs);
-        } else if (sessionDetails.scheduledStart) {
-          const scheduledStartDate =
-            typeof sessionDetails.scheduledStart === 'string'
-              ? new Date(sessionDetails.scheduledStart)
-              : sessionDetails.scheduledStart;
-          const elapsedSecs = Math.floor(
-            (Date.now() - scheduledStartDate.getTime()) / 1000,
-          );
-          if (elapsedSecs > 0) {
-            remainingTime = Math.max(0, sessionDetails.timeLimit - elapsedSecs);
-          }
+        const { isExpired, remainingTimeSecs } =
+          this.getRemainingTimeSecs(sessionDetails);
+        const remainingTime = remainingTimeSecs;
+
+        if (isExpired) {
+          sessionDetails.status = SessionStatus.COMPLETED;
+          sessionDetails.endTime = sessionDetails.endTime || new Date();
+          await Promise.all([
+            this.redisService.del(`quiz:session:${actualSessionId}:status`),
+            this.redisService.set(
+              `quiz:session:${actualSessionId}:details`,
+              JSON.stringify(sessionDetails),
+              3600,
+            ),
+            this.sessionRepo.markCompleted(actualSessionId),
+          ]);
+          return { error: 'Session has ended' };
         }
 
         let questionsToReturn: any[] = [];
@@ -517,14 +552,14 @@ export class SessionsService {
 
     const mergedArray = Array.from(mergedMap.values());
 
-    // Optional cache warm-up for Redis
+    // Optional cache warm-up for Redis (batched into a single command)
     if (mergedArray.length > redisStats.length) {
+      const dataToWarm: Record<string, string> = {};
       for (const stat of mergedArray) {
-        await this.redisService.hset(
-          answersKey,
-          `${stat.userId}:${stat.questionId}`,
-          JSON.stringify(stat),
-        );
+        dataToWarm[`${stat.userId}:${stat.questionId}`] = JSON.stringify(stat);
+      }
+      if (Object.keys(dataToWarm).length > 0) {
+        await this.redisService.hset(answersKey, dataToWarm);
       }
     }
 
@@ -532,11 +567,162 @@ export class SessionsService {
   }
 
   async getNextQuestionForUser(sessionId: string, userId: string) {
-    const sessionRes = await this.processJoinSession(sessionId, userId);
-    if (!sessionRes.data || !sessionRes.data.quizPayload) {
+    const answeredSetKey = `quiz:session:${sessionId}:answered:${userId}`;
+    const cacheKey = `quiz:session:${sessionId}:metadata`;
+
+    // 1. Try to get quiz metadata from local memory first (0ms)
+    let quiz: any = null;
+    const memCached = this.quizMetadataCache.get(sessionId);
+    if (memCached && memCached.expiresAt > Date.now()) {
+      quiz = memCached.quiz;
+    }
+
+    // 2. Fetch answered set and (if not in memory) quiz metadata from Redis
+    const [redisAnswerIds, quizData] = await Promise.all([
+      this.redisService.smembers(answeredSetKey),
+      quiz ? Promise.resolve(null) : this.redisService.get(cacheKey),
+    ]);
+
+    const answeredQuestionIds = redisAnswerIds || [];
+
+    if (!quiz && quizData) {
+      try {
+        quiz = JSON.parse(quizData);
+        this.quizMetadataCache.set(sessionId, {
+          quiz,
+          expiresAt: Date.now() + this.METADATA_CACHE_TTL_MS,
+        });
+      } catch {
+        // Fallback
+      }
+    }
+
+    // Fallback if metadata is not pre-warmed in Redis
+    if (!quiz) {
+      const session = await this.sessionRepo.findByIdWithQuiz(sessionId);
+      if (session?.quiz?.quizId) {
+        quiz = await this.quizzesService.getQuiz(session.quiz.quizId);
+        if (quiz) {
+          this.quizMetadataCache.set(sessionId, {
+            quiz,
+            expiresAt: Date.now() + this.METADATA_CACHE_TTL_MS,
+          });
+          await this.redisService.set(cacheKey, JSON.stringify(quiz), 3600);
+        }
+      }
+    }
+
+    if (!quiz || !quiz.quizQuestions || quiz.quizQuestions.length === 0) {
       return null;
     }
-    const questions = sessionRes.data.quizPayload.questions;
-    return questions && questions.length > 0 ? questions[0] : null;
+
+    const answeredSet = new Set(answeredQuestionIds);
+    const unanswered = quiz.quizQuestions.find(
+      (qq: any) => !answeredSet.has(qq.question.questionId),
+    );
+
+    if (!unanswered || !unanswered.question) {
+      return null;
+    }
+
+    return {
+      questionId: unanswered.question.questionId,
+      title: unanswered.question.title,
+      type: unanswered.question.type,
+      options: unanswered.question.options,
+      points: unanswered.question.points,
+    };
+  }
+
+  async getNextQuestionAfter(
+    sessionId: string,
+    currentQuestionId: string,
+    userId?: string,
+  ): Promise<any | null> {
+    // 1. Check in-memory metadata cache first (0ms, 0 Redis calls)
+    let quiz = this.quizMetadataCache.get(sessionId)?.quiz;
+
+    // 2. Fallback to Redis if not yet in memory
+    if (!quiz) {
+      const cacheKey = `quiz:session:${sessionId}:metadata`;
+      const quizData = await this.redisService.get(cacheKey);
+      if (quizData) {
+        try {
+          quiz = JSON.parse(quizData);
+          this.quizMetadataCache.set(sessionId, {
+            quiz,
+            expiresAt: Date.now() + this.METADATA_CACHE_TTL_MS,
+          });
+        } catch {
+          // Fallback
+        }
+      }
+    }
+
+    if (!quiz?.quizQuestions || quiz.quizQuestions.length === 0) {
+      return userId ? this.getNextQuestionForUser(sessionId, userId) : null;
+    }
+
+    const questions = quiz.quizQuestions;
+    const currentIndex = questions.findIndex(
+      (qq: any) => qq.question?.questionId === currentQuestionId,
+    );
+
+    if (currentIndex !== -1) {
+      const nextIndex = currentIndex + 1;
+      if (nextIndex < questions.length) {
+        const nextQ = questions[nextIndex].question;
+        return {
+          questionId: nextQ.questionId,
+          title: nextQ.title,
+          type: nextQ.type,
+          options: nextQ.options,
+          points: nextQ.points,
+        };
+      }
+      return null; // Quiz finished
+    }
+
+    return userId ? this.getNextQuestionForUser(sessionId, userId) : null;
+  }
+
+  public getRemainingTimeSecs(sessionDetails: {
+    status: SessionStatus;
+    scheduledStart?: Date | string;
+    actualStart?: Date | string;
+    timeLimit: number;
+  }): { isExpired: boolean; remainingTimeSecs: number } {
+    if (sessionDetails.status === SessionStatus.COMPLETED) {
+      return { isExpired: true, remainingTimeSecs: 0 };
+    }
+
+    const start = sessionDetails.actualStart || sessionDetails.scheduledStart;
+    if (!start) {
+      return {
+        isExpired: false,
+        remainingTimeSecs: sessionDetails.timeLimit || 0,
+      };
+    }
+
+    const startDate = typeof start === 'string' ? new Date(start) : start;
+    const elapsedSecs = Math.floor((Date.now() - startDate.getTime()) / 1000);
+    const remainingTime = Math.max(
+      0,
+      (sessionDetails.timeLimit || 0) - elapsedSecs,
+    );
+
+    return {
+      isExpired: remainingTime <= 0,
+      remainingTimeSecs: remainingTime,
+    };
+  }
+
+  public isSessionExpired(sessionDetails: {
+    status: SessionStatus;
+    scheduledStart?: Date | string;
+    actualStart?: Date | string;
+    timeLimit: number;
+  }): boolean {
+    return this.getRemainingTimeSecs(sessionDetails).isExpired;
   }
 }

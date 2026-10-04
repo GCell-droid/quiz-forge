@@ -1,6 +1,16 @@
-import { IsString, IsNotEmpty, IsOptional, IsArray, ValidateNested, IsEnum } from 'class-validator';
+import {
+  IsString,
+  IsNotEmpty,
+  IsOptional,
+  IsArray,
+  ValidateNested,
+  IsEnum,
+} from 'class-validator';
 import { Type } from 'class-transformer';
-import { QuizStatus, QuizVisibility } from '../entities/quiz.entity/quiz.entity';
+import {
+  QuizStatus,
+  QuizVisibility,
+} from '../entities/quiz.entity/quiz.entity';
 import { CreateQuestionDto } from './question.dto';
 
 export class CreateQuizDto {
@@ -23,7 +33,7 @@ export class CreateQuizDto {
   @IsArray()
   @IsOptional()
   tags?: string[];
-  
+
   @IsArray()
   @IsString({ each: true })
   @IsOptional()

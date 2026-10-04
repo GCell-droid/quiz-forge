@@ -7,7 +7,12 @@ describe('legacy HTTP route compatibility', () => {
     ['POST', '/auth/logout', 'DELETE', '/v1/auth/sessions/current'],
     ['PUT', '/user/profile', 'PATCH', '/v1/users/me'],
     ['GET', '/quizzes/bundles/123', 'GET', '/v1/bundles/123'],
-    ['PATCH', '/quizzes/bundles/questions/123', 'PATCH', '/v1/bundles/questions/123'],
+    [
+      'PATCH',
+      '/quizzes/bundles/questions/123',
+      'PATCH',
+      '/v1/bundles/questions/123',
+    ],
     ['DELETE', '/quizzes/questions/123', 'DELETE', '/v1/quizzes/questions/123'],
     ['POST', '/sessions/schedule', 'POST', '/v1/sessions'],
     ['GET', '/sessions/hosted', 'GET', '/v1/sessions?view=hosted'],

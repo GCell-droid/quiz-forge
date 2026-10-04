@@ -26,9 +26,13 @@ export class AuthService {
   ) {}
 
   async register(registerdto: RegisterDTO, res: Response) {
-    const existingUser = await this.userRepository.findByEmail(registerdto.email);
+    const existingUser = await this.userRepository.findByEmail(
+      registerdto.email,
+    );
     if (existingUser) {
-      throw new ConflictException("Can't Register the User. Conflicting Email!");
+      throw new ConflictException(
+        "Can't Register the User. Conflicting Email!",
+      );
     }
     const hashedPassword = await this.hashPassword(registerdto.password!);
 
@@ -56,41 +60,44 @@ export class AuthService {
   }
 
   async login(logindto: LoginDto, request: Request, res: Response) {
-    try {
-      const token = request?.signedCookies?.jwt;
+    const token = request?.signedCookies?.jwt;
 
-      if (token) {
+    if (token) {
+      try {
         const payload = this.jwtService.verify(token as string, {
           secret: this.configService.get<string>('JWT_SECRET'),
         });
-        const user = await this.userRepository.findById(payload.sub as string);
-
-        if (user) {
-          const { passwordHash, ...result } = user;
-          return {
-            message: 'Already logged',
-          };
+        if (payload?.sub) {
+          const user = await this.userRepository.findById(
+            payload.sub as string,
+          );
+          if (user) {
+            return {
+              message: 'Already logged',
+            };
+          }
         }
+      } catch {
+        // Token expired or invalid, proceed with credential verification
       }
-      throw new Error('No valid session');
-    } catch (err) {
-      const user = await this.userRepository.findByEmail(logindto.email);
-
-      if (
-        !user ||
-        !user.passwordHash ||
-        !(await this.verifyPassword(logindto.password, user.passwordHash))
-      ) {
-        throw new UnauthorizedException('Invalid Credentials');
-      }
-      const tokens = this.generateToken(user);
-      const { passwordHash, ...result } = user;
-      this.setAuthCookies(tokens, res);
-      return {
-        message: 'Login Sucess',
-        user: result,
-      };
     }
+
+    const user = await this.userRepository.findByEmail(logindto.email);
+
+    if (
+      !user ||
+      !user.passwordHash ||
+      !(await this.verifyPassword(logindto.password, user.passwordHash))
+    ) {
+      throw new UnauthorizedException('Invalid Credentials');
+    }
+    const tokens = this.generateToken(user);
+    const { passwordHash, ...result } = user;
+    this.setAuthCookies(tokens, res);
+    return {
+      message: 'Login Sucess',
+      user: result,
+    };
   }
 
   async updateRole(userId: string, role: UserRole, res: Response) {
@@ -127,6 +134,7 @@ export class AuthService {
       email: user.email,
       sub: user.uid,
       role: user.role,
+      name: user.name,
     };
     const jwtSecret = this.configService.get<string>('JWT_SECRET');
     return this.jwtService.sign(payload, {
@@ -158,9 +166,9 @@ export class AuthService {
       }
       const user = await this.userRepository.findById(payload.sub as string);
       if (!user) throw new UnauthorizedException('Invalid Token');
-      
+
       const accessToken = this.generateAccessToken(user);
-      
+
       res.cookie('jwt', accessToken, {
         httpOnly: true,
         secure: process.env.NODE_ENV === 'production',
@@ -176,7 +184,9 @@ export class AuthService {
   }
 
   async validateGoogleUser(googleUser: GoogleRegisterDTO, role?: UserRole) {
-    const existingUser = await this.userRepository.findByEmail(googleUser.email);
+    const existingUser = await this.userRepository.findByEmail(
+      googleUser.email,
+    );
 
     if (existingUser) {
       // Pre-Account Takeover Protection

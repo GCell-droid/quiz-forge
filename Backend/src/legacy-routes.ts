@@ -45,7 +45,10 @@ export function resolveLegacyRoute(method: string, path: string): Route | null {
   if (exact) return exact;
 
   if (/^\/quizzes\/bundles(?:\/|$)/.test(path)) {
-    return { method, path: `/v1/bundles${path.slice('/quizzes/bundles'.length)}` };
+    return {
+      method,
+      path: `/v1/bundles${path.slice('/quizzes/bundles'.length)}`,
+    };
   }
   if (/^\/quizzes(?:\/|$)/.test(path)) {
     return { method, path: `/v1${path}` };
