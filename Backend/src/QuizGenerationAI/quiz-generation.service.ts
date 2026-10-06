@@ -1,25 +1,18 @@
 import {
   BadGatewayException,
   BadRequestException,
-  Inject,
   Injectable,
   Logger,
   ServiceUnavailableException,
 } from '@nestjs/common';
-import { QUIZ_MODEL } from './quiz-model.port';
-import type { QuizModel } from './quiz-model.port';
-import type {
-  GeneratedQuiz,
-  GenerateQuizRequest,
-  QuizGenerator,
-} from './quiz-generator.port';
+import { AiModel, GeneratedQuiz, GenerateQuizRequest } from './ai-model.interface';
 import { quizRequestSchema, safeQuizSchema } from './quiz-generation.schema';
 
 @Injectable()
-export class QuizGenerationService implements QuizGenerator {
+export class QuizGenerationService {
   private readonly logger = new Logger(QuizGenerationService.name);
 
-  constructor(@Inject(QUIZ_MODEL) private readonly model: QuizModel) {}
+  constructor(private readonly model: AiModel) {}
 
   async generate(request: GenerateQuizRequest): Promise<GeneratedQuiz> {
     const input = quizRequestSchema.safeParse(request);

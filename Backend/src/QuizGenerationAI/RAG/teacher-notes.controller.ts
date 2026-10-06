@@ -19,9 +19,8 @@ import { jwtAuthGuard } from 'src/auth/guards/jwtguard/jwt-auth.guard';
 import { RoleGuard } from 'src/auth/guards/roles-guard/roles.guard';
 import { UserRole } from 'src/common/enums/enum';
 import { GeminiThrottle } from '../guards/gemini-throttle.guard';
-import { MAX_NOTE_BYTES, requireTeacherId } from './note.errors';
 import { RagPipelineService } from './rag-pipeline.service';
-import { BatchDeleteNotesDto } from './batch-delete-notes.dto';
+import { BatchDeleteNotesDto } from '../DTOs/batch-delete-notes.dto';
 
 interface TeacherIdentity {
   userId: string;
@@ -35,12 +34,7 @@ export class TeacherNotesController {
 
   @Get()
   list(@CurrentUser() user: TeacherIdentity) {
-    return this.notes.list(requireTeacherId(user?.userId));
-  }
-
-  @Get('storage')
-  storage(@CurrentUser() user: TeacherIdentity) {
-    return this.notes.storageSummary(requireTeacherId(user?.userId));
+    return this.notes.list(user.userId);
   }
 
   @Post('batch-delete')
@@ -49,22 +43,19 @@ export class TeacherNotesController {
     @CurrentUser() user: TeacherIdentity,
     @Body() dto: BatchDeleteNotesDto,
   ) {
-    return this.notes.deleteDocuments(
-      requireTeacherId(user?.userId),
-      dto.fileIds,
-    );
+    return this.notes.deleteDocuments(user.userId, dto.fileIds);
   }
 
   @Post()
   @UseGuards(GeminiThrottle)
   @UseInterceptors(
-    FileInterceptor('file', { limits: { fileSize: MAX_NOTE_BYTES, files: 1 } }),
+    FileInterceptor('file', { limits: { fileSize: 20 * 1024 * 1024, files: 1 } }),
   )
   upload(
     @CurrentUser() user: TeacherIdentity,
     @UploadedFile() file: Express.Multer.File,
   ) {
-    return this.notes.ingestDocument(file, requireTeacherId(user?.userId));
+    return this.notes.ingestDocument(file, user.userId);
   }
 
   @Get(':fileId/download')
@@ -72,7 +63,7 @@ export class TeacherNotesController {
     @CurrentUser() user: TeacherIdentity,
     @Param('fileId', ParseUUIDPipe) fileId: string,
   ) {
-    return this.notes.download(requireTeacherId(user?.userId), fileId);
+    return this.notes.download(user.userId, fileId);
   }
 
   @Delete(':fileId')
@@ -81,6 +72,6 @@ export class TeacherNotesController {
     @CurrentUser() user: TeacherIdentity,
     @Param('fileId', ParseUUIDPipe) fileId: string,
   ) {
-    return this.notes.deleteDocument(requireTeacherId(user?.userId), fileId);
+    return this.notes.deleteDocument(user.userId, fileId);
   }
 }

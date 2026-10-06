@@ -3,8 +3,7 @@ import { ScheduleModule } from '@nestjs/schedule';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { AuthModule } from './auth/auth.module';
-import { GeminiModule } from './gemini/gemini.module';
-import { TeacherNotes1791072000000 } from './gemini/rag/teacher-notes.migration';
+import { QuizGenerationAiModule } from './QuizGenerationAI/quiz-generation-ai.module';
 import { ThrottlerModule } from '@nestjs/throttler';
 import { QuizzesModule } from './quizzes/quizzes.module';
 import { SessionsModule } from './sessions/sessions.module';
@@ -35,14 +34,7 @@ import { MetricsMiddleware } from './metrics/metrics.middleware';
         rejectUnauthorized: false,
       },
       autoLoadEntities: true,
-      migrations: [TeacherNotes1791072000000],
-      migrationsRun: true,
-      extra: {
-        max: 10,
-        idleTimeoutMillis: 300000,
-        connectionTimeoutMillis: 10000,
-      },
-      // synchronize: true,
+      synchronize: true,
       // dropSchema: true,
     }),
     ScheduleModule.forRoot(),
@@ -73,7 +65,7 @@ import { MetricsMiddleware } from './metrics/metrics.middleware';
       inject: [ConfigService],
     }),
     AuthModule,
-    GeminiModule,
+    QuizGenerationAiModule,
     QuizzesModule,
     SessionsModule,
     AnalyticsModule,

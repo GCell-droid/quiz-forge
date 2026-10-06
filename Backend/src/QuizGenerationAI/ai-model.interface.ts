@@ -1,5 +1,3 @@
-export const QUIZ_GENERATOR = Symbol('QUIZ_GENERATOR');
-
 export interface GeneratedQuizQuestion {
   id: number;
   question: string;
@@ -8,11 +6,13 @@ export interface GeneratedQuizQuestion {
   explanation: string;
   source: 'teacher_notes' | 'general_knowledge';
 }
+
 export interface GeneratedQuiz {
   title: string;
   description: string;
   questions: GeneratedQuizQuestion[];
 }
+
 export interface GenerateQuizRequest {
   topic: string;
   numQuestions: number;
@@ -21,6 +21,8 @@ export interface GenerateQuizRequest {
   context?: string;
   validChunkCount?: number;
 }
-export interface QuizGenerator {
-  generate(request: GenerateQuizRequest): Promise<GeneratedQuiz>;
+
+export abstract class AiModel {
+  abstract generate(request: GenerateQuizRequest): Promise<unknown>;
+  abstract summarizeElement(type: 'image' | 'table', content: string): Promise<string>;
 }
