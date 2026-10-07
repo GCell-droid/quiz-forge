@@ -45,24 +45,31 @@ export class QuizGenerationAiController {
     @UploadedFile() file?: Express.Multer.File,
   ): Promise<GeneratedQuiz> {
     const teacherId = user!.userId!;
-    if (file && dto.fileId)
-      throw new BadRequestException('Choose a saved note or upload a new one.');
+    if (file && dto.fileIds && dto.fileIds.length > 0)
+      throw new BadRequestException('Choose saved notes or upload a new one.');
     const topic =
       dto.topic?.trim() ||
-      (file ? `Key concepts from ${file.originalname}` : '');
+      (file ? `Key concepts from ${file.originalname}` : '') ||
+      (dto.fileIds && dto.fileIds.length > 0 ? 'Main ideas and key concepts from the provided documents' : '');
+      
     if (topic.length < 3)
       throw new BadRequestException(
         'Please enter a topic of at least 3 characters.',
       );
     const numQuestions = dto.questionCount ?? dto.numQuestions ?? 5;
-    let fileId = dto.fileId;
-    if (file)
-      fileId = (await this.notes.ingestDocument(file, teacherId)).fileId;
+    let fileIds: string[] = [];
+    if (dto.fileIds && dto.fileIds.length > 0) fileIds = [...dto.fileIds];
+    
+    if (file) {
+      const ingested = await this.notes.ingestDocument(file, teacherId);
+      fileIds.push(ingested.fileId);
+    }
+
     const retrieval = await this.notes.retrieveContext(
       topic,
       teacherId,
       numQuestions,
-      fileId,
+      fileIds.length > 0 ? fileIds : undefined,
     );
     return this.quizGenerator.generate({
       topic,
@@ -85,7 +92,7 @@ export class QuizGenerationAiController {
     @CurrentUser() user?: { userId?: string },
     @UploadedFile() file?: Express.Multer.File,
   ): Promise<GeneratedQuiz> {
-    if (!file && !dto.fileId)
+    if (!file && (!dto.fileIds || dto.fileIds.length === 0))
       throw new BadRequestException('Please choose a study document.');
     return this.generateQuiz(dto, user, file);
   }

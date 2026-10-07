@@ -26,7 +26,7 @@ import { GenerationProgress } from "@/components/study-materials/generation-prog
 
 export default function AIGeneratePage() {
   const router = useRouter();
-  const [selectedNote, setSelectedNote] = useState<TeacherNote | null>(null);
+  const [selectedNotes, setSelectedNotes] = useState<TeacherNote[]>([]);
   const [showStorageModal, setShowStorageModal] = useState(false);
   const [notesBusy, setNotesBusy] = useState(false);
   const [topic, setTopic] = useState("");
@@ -46,12 +46,17 @@ export default function AIGeneratePage() {
     setGenerating(true);
     setError(null);
     try {
+      const defaultTopic = selectedNotes.length > 0 
+        ? `Key concepts from ${selectedNotes.map(n => n.fileName).join(', ')}` 
+        : "";
+      const finalTopic = topic.trim() || (defaultTopic.length > 250 ? defaultTopic.substring(0, 247) + "..." : defaultTopic);
+
       const { data } = await api.post<GeneratedQuiz>("/quiz-generations", {
-        topic: topic.trim() || `Key concepts from ${selectedNote?.fileName}`,
+        topic: finalTopic,
         questionCount: numQuestions,
         difficulty,
         ...(gradeLevel.trim() ? { gradeLevel: gradeLevel.trim() } : {}),
-        ...(selectedNote ? { fileId: selectedNote.fileId } : {}),
+        ...(selectedNotes.length > 0 ? { fileIds: selectedNotes.map(n => n.fileId) } : {}),
       });
       setQuestions(
         data.questions.map((question) => ({
@@ -135,7 +140,7 @@ export default function AIGeneratePage() {
         <>
           {/* Study Materials & Storage Management Card */}
           <Card>
-            <CardHeader className="flex-row items-center justify-between pb-3">
+            <CardHeader className="flex flex-col items-start gap-4 pb-3">
               <div>
                 <CardTitle className="text-base font-semibold">Study Materials & Grounding</CardTitle>
                 <p className="text-xs text-muted-foreground mt-0.5">
@@ -148,23 +153,23 @@ export default function AIGeneratePage() {
                 size="sm"
                 onClick={() => setShowStorageModal(true)}
                 disabled={generating}
-                className="shrink-0"
+                className="w-full"
               >
                 <HardDrive className="mr-1.5 h-4 w-4 text-primary" />
                 Manage Storage
               </Button>
             </CardHeader>
             <CardContent>
-              {selectedNote ? (
+              {selectedNotes.length > 0 ? (
                 <div className="flex items-center justify-between rounded-lg border border-primary/30 bg-primary/5 p-3">
                   <div className="flex items-center gap-2.5 min-w-0">
                     <FileText className="h-4 w-4 text-primary shrink-0" />
                     <div className="min-w-0">
                       <p className="truncate text-sm font-medium text-foreground">
-                        {selectedNote.fileName}
+                        {selectedNotes.length} {selectedNotes.length === 1 ? "note" : "notes"} selected
                       </p>
                       <p className="text-xs text-muted-foreground">
-                        {(selectedNote.size / (1024 * 1024)).toFixed(1)} MB • Questions will be grounded strictly in this document
+                        {(selectedNotes.reduce((acc, note) => acc + note.size, 0) / (1024 * 1024)).toFixed(1)} MB • Questions will be grounded strictly in these documents
                       </p>
                     </div>
                   </div>
@@ -174,7 +179,7 @@ export default function AIGeneratePage() {
                       variant="ghost"
                       size="sm"
                       className="text-xs"
-                      onClick={() => setSelectedNote(null)}
+                      onClick={() => setSelectedNotes([])}
                     >
                       Clear selection
                     </Button>
@@ -185,7 +190,7 @@ export default function AIGeneratePage() {
                       className="text-xs"
                       onClick={() => setShowStorageModal(true)}
                     >
-                      Change note
+                      Change notes
                     </Button>
                   </div>
                 </div>
@@ -214,8 +219,8 @@ export default function AIGeneratePage() {
           <NotesStorageModal
             isOpen={showStorageModal}
             onClose={() => setShowStorageModal(false)}
-            selectedNote={selectedNote}
-            onSelectNote={setSelectedNote}
+            selectedNotes={selectedNotes}
+            onSelectNotes={setSelectedNotes}
           />
           <Card>
             <CardHeader>
@@ -231,7 +236,7 @@ export default function AIGeneratePage() {
                 <FieldGroup>
                   <Field>
                     <FieldLabel htmlFor="quiz-topic">
-                      {selectedNote ? "Focus topic (optional)" : "Topic"}
+                      {selectedNotes.length > 0 ? "Focus topic (optional)" : "Topic"}
                     </FieldLabel>
                     <Input
                       id="quiz-topic"
@@ -295,7 +300,7 @@ export default function AIGeneratePage() {
                     disabled={
                       generating ||
                       notesBusy ||
-                      (!selectedNote && topic.trim().length < 3)
+                      (selectedNotes.length === 0 && topic.trim().length < 3)
                     }
                   >
                     <Sparkles className="mr-2 h-4 w-4" />

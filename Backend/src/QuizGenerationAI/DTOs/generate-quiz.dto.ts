@@ -25,13 +25,14 @@ export class GenerateQuizDto {
   questionCount?: number;
 
   @IsOptional()
-  @Transform(({ value }) =>
-    value === '' || value === 'null' || value === 'undefined'
-      ? undefined
-      : value,
-  )
-  @IsUUID()
-  fileId?: string;
+  @Transform(({ value }) => {
+    if (!value || value === 'null' || value === 'undefined') return undefined;
+    if (Array.isArray(value)) return value;
+    if (typeof value === 'string') return value.split(',').map((s) => s.trim());
+    return value;
+  })
+  @IsUUID('all', { each: true })
+  fileIds?: string[];
 
   @IsOptional()
   @Transform(({ value }) => (value === '' ? undefined : value))

@@ -37,8 +37,8 @@ interface NotesListing {
 interface NotesStorageModalProps {
   isOpen: boolean;
   onClose: () => void;
-  selectedNote: TeacherNote | null;
-  onSelectNote: (note: TeacherNote | null) => void;
+  selectedNotes: TeacherNote[];
+  onSelectNotes: (notes: TeacherNote[]) => void;
 }
 
 type UploadStage = "idle" | "uploading" | "processing" | "confirmed" | "error";
@@ -86,15 +86,14 @@ function formatFileSize(bytes: number): string {
 export function NotesStorageModal({
   isOpen,
   onClose,
-  selectedNote,
-  onSelectNote,
+  selectedNotes,
+  onSelectNotes,
 }: NotesStorageModalProps) {
   const [listing, setListing] = useState<NotesListing | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [search, setSearch] = useState("");
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [isDragging, setIsDragging] = useState(false);
   const [uploadState, setUploadState] = useState<UploadState>(initialUploadState);
 
@@ -121,7 +120,6 @@ export function NotesStorageModal({
   useEffect(() => {
     if (isOpen) {
       void fetchNotes();
-      setSelectedIds(new Set());
       setSearch("");
       setUploadState(initialUploadState);
       setError(null);
@@ -368,8 +366,8 @@ export function NotesStorageModal({
 
     await performAction(async () => {
       await api.delete(`/teacher-notes/${note.fileId}`);
-      if (selectedNote?.fileId === note.fileId) {
-        onSelectNote(null);
+      if (selectedNotes.some((n) => n.fileId === note.fileId)) {
+        onSelectNotes(selectedNotes.filter((n) => n.fileId !== note.fileId));
       }
       if (uploadState.result?.fileId === note.fileId) {
         setUploadState(initialUploadState);
@@ -383,17 +381,17 @@ export function NotesStorageModal({
   }
 
   async function deleteSelectedNotes() {
-    if (selectedIds.size === 0) return;
+    if (selectedNotes.length === 0) return;
     if (
       !window.confirm(
-        `Permanently delete ${selectedIds.size} selected note(s)?\n\nThis will remove the files from cloud blob storage and purge all corresponding vectors from the vector database.`
+        `Permanently delete ${selectedNotes.length} selected note(s)?\n\nThis will remove the files from cloud blob storage and purge all corresponding vectors from the vector database.`
       )
     ) {
       return;
     }
 
     await performAction(async () => {
-      const fileIds = Array.from(selectedIds);
+      const fileIds = selectedNotes.map(n => n.fileId);
       try {
         await api.post("/teacher-notes/batch-delete", { fileIds });
       } catch {
@@ -402,13 +400,10 @@ export function NotesStorageModal({
           await api.delete(`/teacher-notes/${id}`);
         }
       }
-      if (selectedNote && selectedIds.has(selectedNote.fileId)) {
-        onSelectNote(null);
-      }
-      if (uploadState.result && selectedIds.has(uploadState.result.fileId)) {
+      onSelectNotes([]);
+      if (uploadState.result && selectedNotes.some((n) => n.fileId === uploadState.result!.fileId)) {
         setUploadState(initialUploadState);
       }
-      setSelectedIds(new Set());
     });
   }
 
@@ -427,20 +422,26 @@ export function NotesStorageModal({
 
   function toggleSelectAll() {
     if (!filteredNotes.length) return;
-    if (selectedIds.size === filteredNotes.length) {
-      setSelectedIds(new Set());
-    } else {
-      setSelectedIds(new Set(filteredNotes.map((n) => n.fileId)));
-    }
-  }
+    
+    // Check if all filtered notes are currently selected
+    const allSelected = filteredNotes.every(note => 
+      selectedNotes.some(n => n.fileId === note.fileId)
+    );
 
-  function toggleSelectId(id: string) {
-    setSelectedIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
+    if (allSelected) {
+      // Remove all filtered notes from selection
+      const filteredIds = new Set(filteredNotes.map(n => n.fileId));
+      onSelectNotes(selectedNotes.filter(n => !filteredIds.has(n.fileId)));
+    } else {
+      // Add all filtered notes to selection (avoiding duplicates)
+      const newSelection = [...selectedNotes];
+      for (const note of filteredNotes) {
+        if (!newSelection.some(n => n.fileId === note.fileId)) {
+          newSelection.push(note);
+        }
+      }
+      onSelectNotes(newSelection);
+    }
   }
 
   if (!isOpen) return null;
@@ -450,11 +451,6 @@ export function NotesStorageModal({
     n.fileName.toLowerCase().includes(search.toLowerCase().trim())
   );
 
-  const usedMB = listing ? (listing.usedBytes / (1024 * 1024)).toFixed(1) : "0.0";
-  const limitMB = listing ? (listing.limitBytes / (1024 * 1024)).toFixed(0) : "200";
-  const percentUsed = listing
-    ? Math.min(100, Math.round((listing.usedBytes / listing.limitBytes) * 100))
-    : 0;
 
   return (
     <div
@@ -495,37 +491,8 @@ export function NotesStorageModal({
           {error && <ErrorMessage message={error} />}
 
           {/* Storage Usage Card */}
-          <div className="rounded-lg border bg-muted/20 p-4 space-y-2.5">
-            <div className="flex items-center justify-between text-sm">
-              <span className="font-medium flex items-center gap-1.5">
-                <HardDrive className="h-4 w-4 text-muted-foreground" />
-                Cloud Blob Storage Usage
-              </span>
-              <span className="font-mono text-xs text-muted-foreground">
-                {usedMB} MB / {limitMB} MB ({percentUsed}%)
-              </span>
-            </div>
-            <div className="w-full bg-secondary h-2.5 rounded-full overflow-hidden">
-              <div
-                className={`h-full transition-all duration-300 ${
-                  percentUsed > 90
-                    ? "bg-destructive"
-                    : percentUsed > 70
-                    ? "bg-amber-500"
-                    : "bg-primary"
-                }`}
-                style={{ width: `${percentUsed}%` }}
-              />
-            </div>
-            <div className="flex items-center justify-between text-xs text-muted-foreground pt-1">
-              <span>{notes.length} note(s) indexed in vector DB</span>
-              <span>
-                {listing
-                  ? ((listing.limitBytes - listing.usedBytes) / (1024 * 1024)).toFixed(1)
-                  : "200.0"}{" "}
-                MB available
-              </span>
-            </div>
+          <div className="flex items-center justify-between text-xs text-muted-foreground pt-1 bg-muted/20 p-4 rounded-lg border">
+            <span>{notes.length} note(s) indexed in vector DB</span>
           </div>
 
           {/* LIVE UPLOAD / PROGRESS CARD */}
@@ -738,7 +705,9 @@ export function NotesStorageModal({
                       className="h-8 text-xs bg-emerald-600 hover:bg-emerald-700 text-white gap-1"
                       onClick={() => {
                         if (uploadState.result) {
-                          onSelectNote(uploadState.result);
+                          if (!selectedNotes.some((n) => n.fileId === uploadState.result!.fileId)) {
+                            onSelectNotes([...selectedNotes, uploadState.result]);
+                          }
                         }
                         onClose();
                       }}
@@ -871,7 +840,7 @@ export function NotesStorageModal({
               >
                 <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
               </Button>
-              {selectedIds.size > 0 && (
+              {selectedNotes.length > 0 && (
                 <Button
                   type="button"
                   size="sm"
@@ -880,7 +849,7 @@ export function NotesStorageModal({
                   onClick={() => void deleteSelectedNotes()}
                 >
                   <Trash2 className="mr-1.5 h-4 w-4" />
-                  Delete ({selectedIds.size})
+                  Delete ({selectedNotes.length})
                 </Button>
               )}
             </div>
@@ -894,7 +863,7 @@ export function NotesStorageModal({
                   type="checkbox"
                   aria-label="Select all notes"
                   className="rounded border-input h-3.5 w-3.5 accent-primary cursor-pointer"
-                  checked={filteredNotes.length > 0 && selectedIds.size === filteredNotes.length}
+                  checked={filteredNotes.length > 0 && selectedNotes.length === filteredNotes.length}
                   onChange={toggleSelectAll}
                   disabled={loading || filteredNotes.length === 0 || isUploadingOrProcessing}
                 />
@@ -922,8 +891,7 @@ export function NotesStorageModal({
             ) : (
               <ul className="divide-y max-h-64 overflow-y-auto">
                 {filteredNotes.map((note) => {
-                  const isChecked = selectedIds.has(note.fileId);
-                  const isQuizSelected = selectedNote?.fileId === note.fileId;
+                  const isChecked = selectedNotes.some((n) => n.fileId === note.fileId);
                   const isJustUploaded = uploadState.result?.fileId === note.fileId;
                   const status = statusLabels[note.status] || {
                     label: note.status,
@@ -934,7 +902,7 @@ export function NotesStorageModal({
                     <li
                       key={note.fileId}
                       className={`flex items-center justify-between gap-3 p-3 transition-colors text-sm hover:bg-muted/30 ${
-                        isQuizSelected
+                        isChecked
                           ? "bg-primary/5"
                           : isJustUploaded
                           ? "bg-emerald-500/5 dark:bg-emerald-950/20"
@@ -947,7 +915,13 @@ export function NotesStorageModal({
                           aria-label={`Select ${note.fileName}`}
                           className="rounded border-input h-3.5 w-3.5 accent-primary cursor-pointer"
                           checked={isChecked}
-                          onChange={() => toggleSelectId(note.fileId)}
+                          onChange={() => {
+                            if (isChecked) {
+                              onSelectNotes(selectedNotes.filter((n) => n.fileId !== note.fileId));
+                            } else {
+                              onSelectNotes([...selectedNotes, note]);
+                            }
+                          }}
                           disabled={busy || isUploadingOrProcessing}
                         />
                         <FileText className="h-4 w-4 text-muted-foreground shrink-0" />
@@ -980,10 +954,10 @@ export function NotesStorageModal({
                             >
                               {status.label}
                             </Badge>
-                            {isQuizSelected && (
+                            {isChecked && (
                               <>
                                 <span>•</span>
-                                <span className="text-primary font-semibold">Active for Quiz</span>
+                                <span className="text-primary font-semibold">Selected for Quiz</span>
                               </>
                             )}
                           </div>
@@ -992,28 +966,6 @@ export function NotesStorageModal({
 
                       {/* Action buttons */}
                       <div className="flex items-center gap-1 shrink-0">
-                        {note.status === "ready" && (
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant={isQuizSelected ? "secondary" : "outline"}
-                            className="h-7 text-xs px-2"
-                            disabled={busy || isUploadingOrProcessing}
-                            onClick={() => {
-                              onSelectNote(isQuizSelected ? null : note);
-                              onClose();
-                            }}
-                          >
-                            {isQuizSelected ? (
-                              <>
-                                <Check className="h-3 w-3 mr-1 text-primary" />
-                                Selected
-                              </>
-                            ) : (
-                              "Use for Quiz"
-                            )}
-                          </Button>
-                        )}
                         <Button
                           type="button"
                           variant="ghost"
@@ -1062,7 +1014,7 @@ export function NotesStorageModal({
             size="sm"
             disabled={isUploadingOrProcessing}
             onClick={() => {
-              onSelectNote(null);
+              onSelectNotes([]);
               onClose();
             }}
           >
@@ -1072,7 +1024,7 @@ export function NotesStorageModal({
             type="button"
             size="sm"
             disabled={isUploadingOrProcessing}
-            onClick={handleModalClose}
+            onClick={() => onClose()}
           >
             Done
           </Button>

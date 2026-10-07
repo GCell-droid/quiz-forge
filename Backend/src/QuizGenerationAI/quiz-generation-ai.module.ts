@@ -16,6 +16,8 @@ import {
   DOCUMENT_PROCESSOR,
 } from './RAG/rag.interfaces';
 import { UnstructuredDocumentStrategy } from './RAG/unstructured-document.strategy';
+import { LocalDocumentStrategy } from './RAG/local-document.strategy';
+import { FallbackDocumentStrategy } from './RAG/fallback-document.strategy';
 @Module({
   imports: [TypeOrmModule.forFeature([TeacherNote])],
   providers: [
@@ -25,7 +27,10 @@ import { UnstructuredDocumentStrategy } from './RAG/unstructured-document.strate
     { provide: AiModel, useClass: LangChainGeminiModel },
     { provide: VECTOR_STORE, useClass: PineconeService },
     { provide: BLOB_STORAGE, useClass: BackblazeStorageService },
-    { provide: DOCUMENT_PROCESSOR, useClass: UnstructuredDocumentStrategy },
+    UnstructuredDocumentStrategy,
+    LocalDocumentStrategy,
+    FallbackDocumentStrategy,
+    { provide: DOCUMENT_PROCESSOR, useClass: FallbackDocumentStrategy },
     RagPipelineService,
     jwtAuthGuard,
   ],

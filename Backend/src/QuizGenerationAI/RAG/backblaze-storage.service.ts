@@ -70,21 +70,26 @@ export class BackblazeStorageService implements BlobStorage {
       bucketId: this.bucketId(auth),
     });
     
-    const response = await fetch(upload.uploadUrl, {
-      method: 'POST',
-      signal: AbortSignal.timeout(120000),
-      headers: {
-        Authorization: upload.authorizationToken,
-        'X-Bz-File-Name': encodeURIComponent(key),
-        'Content-Type': mimeType,
-        'Content-Length': String(buffer.length),
-        'X-Bz-Content-Sha1': createHash('sha1').update(buffer).digest('hex'),
-      },
-      body: new Uint8Array(buffer),
-    });
-    
-    if (!response.ok) throw new StorageProviderError('upload', response.status);
-    await response.arrayBuffer();
+    try {
+      const response = await this.fetchWithRetry(upload.uploadUrl, {
+        method: 'POST',
+        signal: AbortSignal.timeout(120000),
+        headers: {
+          Authorization: upload.authorizationToken,
+          'X-Bz-File-Name': encodeURIComponent(key),
+          'Content-Type': mimeType,
+          'Content-Length': String(buffer.length),
+          'X-Bz-Content-Sha1': createHash('sha1').update(buffer).digest('hex'),
+        },
+        body: new Uint8Array(buffer),
+      });
+      
+      if (!response.ok) throw new StorageProviderError('upload', response.status);
+      await response.arrayBuffer();
+    } catch (error: any) {
+      if (error instanceof StorageProviderError) throw error;
+      throw new StorageProviderError(`upload_network_error: ${error.message}`, 500);
+    }
   }
 
   async downloadUrl(key: string): Promise<string> {
@@ -172,21 +177,46 @@ export class BackblazeStorageService implements BlobStorage {
     } while (startFileName);
   }
 
+  private async fetchWithRetry(url: string, options: RequestInit, retries = 2): Promise<Response> {
+    let lastError: any;
+    for (let attempt = 0; attempt <= retries; attempt++) {
+      try {
+        const response = await fetch(url, options);
+        if (response.ok || (response.status >= 400 && response.status < 500 && response.status !== 429)) {
+          // Return if successful, or if it's a client error (don't retry client errors except 429 Rate Limit)
+          return response;
+        }
+        lastError = new Error(`HTTP ${response.status}`);
+      } catch (error) {
+        lastError = error;
+      }
+      if (attempt < retries) {
+        await new Promise((resolve) => setTimeout(resolve, 1000 * Math.pow(2, attempt)));
+      }
+    }
+    throw lastError;
+  }
+
   private async authorize(): Promise<B2Authorization> {
-    const response = await fetch(
-      'https://api.backblazeb2.com/b2api/v2/b2_authorize_account',
-      {
-        signal: AbortSignal.timeout(30000),
-        headers: {
-          Authorization:
-            'Basic ' +
-            Buffer.from(`${this.b2KeyId}:${this.b2Key}`).toString('base64'),
+    try {
+      const response = await this.fetchWithRetry(
+        'https://api.backblazeb2.com/b2api/v2/b2_authorize_account',
+        {
+          signal: AbortSignal.timeout(30000),
+          headers: {
+            Authorization:
+              'Basic ' +
+              Buffer.from(`${this.b2KeyId}:${this.b2Key}`).toString('base64'),
+          },
         },
-      },
-    );
-    if (!response.ok)
-      throw new StorageProviderError('authorization', response.status);
-    return (await response.json()) as B2Authorization;
+      );
+      if (!response.ok)
+        throw new StorageProviderError('authorization', response.status);
+      return (await response.json()) as B2Authorization;
+    } catch (error: any) {
+      if (error instanceof StorageProviderError) throw error;
+      throw new StorageProviderError(`authorization_network_error: ${error.message}`, 500);
+    }
   }
 
   private async request<T>(
@@ -194,18 +224,23 @@ export class BackblazeStorageService implements BlobStorage {
     operation: string,
     body: object,
   ): Promise<T> {
-    const response = await fetch(`${auth.apiUrl}/b2api/v2/${operation}`, {
-      method: 'POST',
-      signal: AbortSignal.timeout(30000),
-      headers: {
-        Authorization: auth.authorizationToken,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(body),
-    });
-    if (!response.ok)
-      throw new StorageProviderError(operation, response.status);
-    return (await response.json()) as T;
+    try {
+      const response = await this.fetchWithRetry(`${auth.apiUrl}/b2api/v2/${operation}`, {
+        method: 'POST',
+        signal: AbortSignal.timeout(30000),
+        headers: {
+          Authorization: auth.authorizationToken,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(body),
+      });
+      if (!response.ok)
+        throw new StorageProviderError(operation, response.status);
+      return (await response.json()) as T;
+    } catch (error: any) {
+      if (error instanceof StorageProviderError) throw error;
+      throw new StorageProviderError(`${operation}_network_error: ${error.message}`, 500);
+    }
   }
 
   private bucketId(auth: B2Authorization): string {

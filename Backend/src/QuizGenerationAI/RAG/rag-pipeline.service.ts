@@ -95,19 +95,32 @@ export class RagPipelineService {
       note.status = 'ready';
       await this.notes.save(note);
       return this.summary(note);
-    } catch (error) {
+    } catch (error: any) {
       this.logger.error(`Failed to ingest note "${fileName}"`, error);
       await this.storage.deleteFolder(folderKey).catch(() => {});
       await this.vectorStore.deleteDocument(teacherId, fileId, note.chunkCount).catch(() => {});
       note.status = 'failed';
       await this.notes.save(note);
-      throw new BadRequestException('Your note could not be prepared.');
+      
+      let errorMessage = 'Your note could not be prepared. Please try again.';
+      const errText = (error?.message || '').toLowerCase();
+      
+      if (errText.includes('timeout') || errText.includes('network_error') || errText.includes('und_err_connect_timeout')) {
+        errorMessage = 'The upload timed out due to a network issue. Please wait 1-2 minutes and try again.';
+      } else if (errText.includes('429') || errText.includes('too many requests')) {
+        errorMessage = 'The servers are currently busy. Please wait 1-2 minutes before trying again.';
+      } else if (error?.response?.message) {
+        // Pass through specific HTTP exceptions (like from unstructured API)
+        errorMessage = error.response.message;
+      }
+
+      throw new BadRequestException(errorMessage);
     }
   }
 
-  async retrieveContext(topic: string, teacherId: string, questionCount: number, fileId?: string): Promise<RetrievalResult> {
+  async retrieveContext(topic: string, teacherId: string, questionCount: number, requestedFileIds?: string[]): Promise<RetrievalResult> {
     const readyNotes = await this.notes.find({
-      where: { teacherId, status: 'ready', ...(fileId ? { fileId } : {}) },
+      where: { teacherId, status: 'ready', ...(requestedFileIds?.length ? { fileId: In(requestedFileIds) } : {}) },
       select: { fileId: true },
     });
     

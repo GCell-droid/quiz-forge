@@ -130,7 +130,7 @@ export class LangChainGeminiModel extends AiModel {
     }
 
     try {
-      const response = await this.model.invoke(messageContent);
+      const response = await this.model.invoke([["human", messageContent]]);
       return response.content.toString().trim();
     } catch (error) {
       this.logger.error('Failed to summarize element', error);
