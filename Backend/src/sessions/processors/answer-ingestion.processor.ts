@@ -6,7 +6,8 @@ import User from '../../common/entity/user.entity';
 import { RedisService } from '../../redis/redis.service';
 import { QuizzesService } from '../../quizzes/quizzes.service';
 
-import { scoreAnswer } from '../utils/scoring.util';
+import { ANSWER_SCORER } from '../ports/answer-scoring.port';
+import type { AnswerScorer } from '../ports/answer-scoring.port';
 import { AnswerJob } from '../ports/answer-queue.port';
 import { SESSION_EVENTS } from '../ports/session-events.port';
 import type { SessionEvents } from '../ports/session-events.port';
@@ -24,6 +25,7 @@ export class AnswerIngestionProcessor extends WorkerHost {
     private readonly userRepo: UserRepository,
     private readonly redisService: RedisService,
     private readonly quizzesService: QuizzesService,
+    @Inject(ANSWER_SCORER) private readonly answerScorer: AnswerScorer,
     @Inject(SESSION_EVENTS) private readonly sessionEvents: SessionEvents,
   ) {
     super();
@@ -32,12 +34,15 @@ export class AnswerIngestionProcessor extends WorkerHost {
   async process(job: Job<AnswerJob>): Promise<void> {
     const { sessionId, questionId, userId, response, timeTakenSecs } = job.data;
 
-    // Try Redis cache first to avoid DB hits
+    // 1. Load Quiz details to verify the correct answer.
+    // Try to get from Redis pre-warmed cache first.
     const cacheKey = `quiz:session:${sessionId}:metadata`;
     const cachedQuizData = await this.redisService.get(cacheKey);
-    let quiz = cachedQuizData ? JSON.parse(cachedQuizData) : null;
 
-    if (!quiz) {
+    let quiz: any;
+    if (cachedQuizData) {
+      quiz = JSON.parse(cachedQuizData);
+    } else {
       // Fallback: Fetch session and then quiz from DB
       const session = await this.sessionRepo.findByIdWithQuiz(sessionId);
       if (!session) {
@@ -60,7 +65,10 @@ export class AnswerIngestionProcessor extends WorkerHost {
     const question = quizQuestionBridge.question;
 
     // 2. Evaluate answer correctness
-    const { isCorrect, pointsScored } = scoreAnswer(question, response);
+    const { isCorrect, pointsScored } = this.answerScorer.score(
+      question,
+      response,
+    );
 
     // 3. Save QuestionResponse to database
     const questionResponse = this.responseRepo.create({
@@ -73,32 +81,15 @@ export class AnswerIngestionProcessor extends WorkerHost {
       timeTakenSecs,
     });
 
-    try {
-      await this.responseRepo.save(questionResponse);
-      console.log(
-        `[Answer Ingestion] Saved answer for user: ${userId}, question: ${questionId}, correct: ${isCorrect}`,
-      );
-    } catch (dbErr: any) {
-      if (
-        dbErr?.code === '23503' ||
-        dbErr?.message?.includes('foreign key constraint')
-      ) {
-        // Virtual/benchmark user not registered in UserEntity table; skip persistent DB save
-        console.warn(
-          `[Answer Ingestion] Skipped DB save for virtual user: ${userId}`,
-        );
-      } else {
-        throw dbErr;
-      }
-    }
+    await this.responseRepo.save(questionResponse);
+    console.log(
+      `[Answer Ingestion] Saved answer for user: ${userId}, question: ${questionId}, correct: ${isCorrect}`,
+    );
 
-    // 4. Fetch User to broadcast userName (Fast path: use userName provided in job data)
-    let userName = job.data.userName;
-    if (!userName) {
-      const user = await this.userRepo.findById(userId);
-      userName =
-        user?.name || (user?.email ? user.email.split('@')[0] : 'Unknown');
-    }
+    // 4. Fetch User to broadcast userName
+    const user = await this.userRepo.findById(userId);
+    const userName =
+      user?.name || (user?.email ? user.email.split('@')[0] : 'Unknown');
 
     const answerPayload = {
       questionId,

@@ -13,7 +13,6 @@ import { QuizzesService } from '../quizzes/quizzes.service';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import User from '../common/entity/user.entity';
-import { UserRole } from '../common/enums/enum';
 import { RedisService } from '../redis/redis.service';
 import {
   SessionRepository,
@@ -21,7 +20,6 @@ import {
 } from './repositories/session.repository';
 import { ResponseRepository } from './repositories/response.repository';
 import { PageOptions } from '../common/pagination';
-import { generateJoinCode, getRemainingTimeSecs, isSessionExpired } from './utils/session.util';
 
 @Injectable()
 export class SessionsService {
@@ -37,24 +35,11 @@ export class SessionsService {
     private readonly redisService: RedisService,
   ) {}
 
-  async getMyResults(
-    userId: string,
-    sessionIdParam: string,
-    userRole?: string,
-  ) {
+  async getMyResults(userId: string, sessionIdParam: string) {
     const session = await this.sessionRepo.findByReference(sessionIdParam);
 
     if (!session) {
       throw new NotFoundException('Session not found');
-    }
-
-    const isTeacher =
-      userRole === UserRole.TEACHER || session.createdBy?.uid === userId;
-
-    if (!isTeacher && session.status !== SessionStatus.COMPLETED) {
-      throw new BadRequestException(
-        'Quiz results are only available after the session has ended',
-      );
     }
 
     const sessionId = session.sessionId;
@@ -133,7 +118,7 @@ export class SessionsService {
 
     while (retries < MAX_RETRIES) {
       try {
-        const joinCode = generateJoinCode();
+        const joinCode = this.generateJoinCode();
 
         const session = {
           quiz,
@@ -196,6 +181,14 @@ export class SessionsService {
     return savedSession;
   }
 
+  private generateJoinCode(): string {
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+    let result = '';
+    for (let i = 0; i < 6; i++) {
+      result += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    return result;
+  }
 
   async getHostedSessions(userId: string, options: PageOptions) {
     return this.sessionRepo.findHostedBy(userId, options);
@@ -220,7 +213,7 @@ export class SessionsService {
       );
     }
 
-    const quiz = await this.quizzesService.getQuiz(session.quiz.quizId);
+    let quiz = await this.quizzesService.getQuiz(session.quiz.quizId);
     let quizPayload: any = null;
 
     if (quiz && quiz.quizQuestions) {
@@ -232,7 +225,6 @@ export class SessionsService {
           title: qq.question.title,
           type: qq.question.type,
           options: qq.question.options,
-          correctAnswer: qq.question.correctAnswer,
           points: qq.question.points,
         })),
         timeLimit: session.timeLimit,
@@ -313,7 +305,7 @@ export class SessionsService {
       );
     }
 
-    const isCreator = userId === sessionDetails.creatorId;
+    let isCreator = userId === sessionDetails.creatorId;
     let initialStatsPayload: any[] = [];
 
     if (isCreator) {
@@ -327,11 +319,20 @@ export class SessionsService {
     let answeredQuestionIds: string[] = [];
 
     if (!isCreator && userId) {
+      // 1. Fetch instantly from the Redis Set populated by the Gateway
       const answeredSetKey = `quiz:session:${actualSessionId}:answered:${userId}`;
-      answeredQuestionIds = await this.redisService.smembers(answeredSetKey) || [];
+      const redisAnswerIds = await this.redisService.smembers(answeredSetKey);
 
-      if (answeredQuestionIds.length === 0 && isSessionUuid(userId)) {
-        answeredQuestionIds = await this.responseRepo.findQuestionIdsForUser(actualSessionId, userId);
+      if (redisAnswerIds && redisAnswerIds.length > 0) {
+        answeredQuestionIds = redisAnswerIds;
+      } else {
+        // 2. Fallback to DB ONLY if the Redis Set is empty (e.g. cache cleared)
+        answeredQuestionIds = await this.responseRepo.findQuestionIdsForUser(
+          actualSessionId,
+          userId,
+        );
+
+        // Warm up the cache for next time
         if (answeredQuestionIds.length > 0) {
           await this.redisService.sadd(answeredSetKey, ...answeredQuestionIds);
         }
@@ -340,58 +341,17 @@ export class SessionsService {
 
     // redisStatus is already fetched concurrently above
 
-    if (isSessionExpired(sessionDetails)) {
-      if (sessionDetails.status !== SessionStatus.COMPLETED) {
-        sessionDetails.status = SessionStatus.COMPLETED;
-        sessionDetails.endTime = sessionDetails.endTime || new Date();
-        await Promise.all([
-          this.redisService.del(`quiz:session:${actualSessionId}:status`),
-          this.redisService.set(
-            `quiz:session:${actualSessionId}:details`,
-            JSON.stringify(sessionDetails),
-            3600,
-          ),
-          this.sessionRepo.markCompleted(actualSessionId),
-        ]);
-      }
+    if (sessionDetails.status === SessionStatus.COMPLETED) {
       return { error: 'Session has ended' };
     }
 
-    const now = Date.now();
-    const hasScheduledTimePassed =
-      Boolean(sessionDetails.scheduledStart) &&
-      new Date(sessionDetails.scheduledStart).getTime() <= now;
-
     const isSessionActive =
       redisStatus === SessionStatus.ACTIVE ||
-      sessionDetails.status === SessionStatus.ACTIVE ||
-      hasScheduledTimePassed;
-
-    if (
-      hasScheduledTimePassed &&
-      sessionDetails.status === SessionStatus.SCHEDULED
-    ) {
-      sessionDetails.status = SessionStatus.ACTIVE;
-      if (!sessionDetails.actualStart) {
-        sessionDetails.actualStart = new Date(sessionDetails.scheduledStart);
-      }
-      await Promise.all([
-        this.redisService.set(
-          `quiz:session:${actualSessionId}:status`,
-          SessionStatus.ACTIVE,
-          3600,
-        ),
-        this.redisService.set(
-          `quiz:session:${actualSessionId}:details`,
-          JSON.stringify(sessionDetails),
-          3600,
-        ),
-      ]);
-    }
+      sessionDetails.status === SessionStatus.ACTIVE;
 
     if (isSessionActive) {
       const cacheKey = `quiz:session:${actualSessionId}:metadata`;
-      const quizData = await this.redisService.get(cacheKey);
+      let quizData = await this.redisService.get(cacheKey);
       let quiz;
 
       if (quizData) {
@@ -417,22 +377,16 @@ export class SessionsService {
       }
 
       if (quiz && quiz.quizQuestions) {
-        const { isExpired, remainingTimeSecs } = getRemainingTimeSecs(sessionDetails);
-        const remainingTime = remainingTimeSecs;
-
-        if (isExpired) {
-          sessionDetails.status = SessionStatus.COMPLETED;
-          sessionDetails.endTime = sessionDetails.endTime || new Date();
-          await Promise.all([
-            this.redisService.del(`quiz:session:${actualSessionId}:status`),
-            this.redisService.set(
-              `quiz:session:${actualSessionId}:details`,
-              JSON.stringify(sessionDetails),
-              3600,
-            ),
-            this.sessionRepo.markCompleted(actualSessionId),
-          ]);
-          return { error: 'Session has ended' };
+        let remainingTime = sessionDetails.timeLimit;
+        if (sessionDetails.actualStart) {
+          const actualStartDate =
+            typeof sessionDetails.actualStart === 'string'
+              ? new Date(sessionDetails.actualStart)
+              : sessionDetails.actualStart;
+          const elapsedSecs = Math.floor(
+            (Date.now() - actualStartDate.getTime()) / 1000,
+          );
+          remainingTime = Math.max(0, sessionDetails.timeLimit - elapsedSecs);
         }
 
         let questionsToReturn: any[] = [];
@@ -475,7 +429,7 @@ export class SessionsService {
       success: true,
       data: {
         sessionId: actualSessionId,
-        status: isSessionActive ? SessionStatus.ACTIVE : sessionDetails.status,
+        status: sessionDetails.status,
         scheduledStart: sessionDetails.scheduledStart,
         isCreator,
         initialStats: initialStatsPayload,
@@ -486,128 +440,65 @@ export class SessionsService {
   }
 
   private async getMergedAnswers(sessionId: string, creatorId?: string) {
-    const mergedMap = new Map<string, any>();
+    const answersKey = `quiz:session:${sessionId}:answers`;
+    const cachedAnswers = await this.redisService.hgetall(answersKey);
+    const redisStats =
+      cachedAnswers && Object.keys(cachedAnswers).length > 0
+        ? Object.values(cachedAnswers).map((v) => JSON.parse(v))
+        : [];
 
-    // 1. Fetch from DB
     const dbAnswers = await this.responseRepo.findForSession(sessionId);
-    dbAnswers.forEach((ans) => {
-      if (ans.userId === creatorId) return;
-      mergedMap.set(`${ans.userId}:${ans.questionId}`, {
+
+    const dbStats = dbAnswers
+      .filter((ans) => ans.userId !== creatorId)
+      .map((ans) => ({
         questionId: ans.questionId,
         userId: ans.userId,
-        userName: ans.userName || (ans.userEmail ? ans.userEmail.split('@')[0] : 'Unknown'),
+        userName:
+          ans.userName ||
+          (ans.userEmail ? ans.userEmail.split('@')[0] : 'Unknown'),
         response: ans.response,
         timeTakenSecs: ans.timeTakenSecs,
         isCorrect: ans.isCorrect,
         pointsScored: ans.pointsScored,
-      });
-    });
+      }));
 
-    // 2. Fetch & merge live answers from Redis Hash
-    const cachedAnswers = await this.redisService.hgetall(`quiz:session:${sessionId}:answers`);
-    Object.values(cachedAnswers || {}).forEach((v) => {
-      const stat = JSON.parse(v);
+    const mergedMap = new Map<string, any>();
+
+    // Start with DB answers
+    for (const stat of dbStats) {
+      mergedMap.set(`${stat.userId}:${stat.questionId}`, stat);
+    }
+
+    // Overwrite with Redis answers (live/in-queue takes precedence)
+    for (const stat of redisStats) {
       if (stat.userId !== creatorId) {
         mergedMap.set(`${stat.userId}:${stat.questionId}`, stat);
       }
-    });
+    }
 
-    return Array.from(mergedMap.values());
+    const mergedArray = Array.from(mergedMap.values());
+
+    // Optional cache warm-up for Redis
+    if (mergedArray.length > redisStats.length) {
+      for (const stat of mergedArray) {
+        await this.redisService.hset(
+          answersKey,
+          `${stat.userId}:${stat.questionId}`,
+          JSON.stringify(stat),
+        );
+      }
+    }
+
+    return mergedArray;
   }
 
   async getNextQuestionForUser(sessionId: string, userId: string) {
-    const answeredSetKey = `quiz:session:${sessionId}:answered:${userId}`;
-    const cacheKey = `quiz:session:${sessionId}:metadata`;
-
-    const [redisAnswerIds, quizData] = await Promise.all([
-      this.redisService.smembers(answeredSetKey),
-      this.redisService.get(cacheKey),
-    ]);
-
-    let answeredQuestionIds = redisAnswerIds || [];
-    if (answeredQuestionIds.length === 0 && isSessionUuid(userId)) {
-      answeredQuestionIds = await this.responseRepo.findQuestionIdsForUser(sessionId, userId);
-      if (answeredQuestionIds.length > 0) {
-        await this.redisService.sadd(answeredSetKey, ...answeredQuestionIds);
-      }
-    }
-
-    let quiz = quizData ? JSON.parse(quizData) : null;
-
-    // Fallback if metadata is not pre-warmed in Redis
-    if (!quiz) {
-      const session = await this.sessionRepo.findByIdWithQuiz(sessionId);
-      if (session?.quiz?.quizId) {
-        quiz = await this.quizzesService.getQuiz(session.quiz.quizId);
-        if (quiz) {
-          await this.redisService.set(cacheKey, JSON.stringify(quiz), 3600);
-        }
-      }
-    }
-
-    if (!quiz || !quiz.quizQuestions || quiz.quizQuestions.length === 0) {
+    const sessionRes = await this.processJoinSession(sessionId, userId);
+    if (!sessionRes.data || !sessionRes.data.quizPayload) {
       return null;
     }
-
-    const answeredSet = new Set(answeredQuestionIds);
-    const unanswered = quiz.quizQuestions.find(
-      (qq: any) => !answeredSet.has(qq.question.questionId),
-    );
-
-    if (!unanswered || !unanswered.question) {
-      return null;
-    }
-
-    return {
-      questionId: unanswered.question.questionId,
-      title: unanswered.question.title,
-      type: unanswered.question.type,
-      options: unanswered.question.options,
-      points: unanswered.question.points,
-    };
+    const questions = sessionRes.data.quizPayload.questions;
+    return questions && questions.length > 0 ? questions[0] : null;
   }
-
-  async getNextQuestionAfter(
-    sessionId: string,
-    currentQuestionId: string,
-    userId?: string,
-  ): Promise<any | null> {
-    const cacheKey = `quiz:session:${sessionId}:metadata`;
-    const quizData = await this.redisService.get(cacheKey);
-    let quiz = quizData ? JSON.parse(quizData) : null;
-
-    if (!quiz) {
-      const session = await this.sessionRepo.findByIdWithQuiz(sessionId);
-      if (session?.quiz?.quizId) {
-        quiz = await this.quizzesService.getQuiz(session.quiz.quizId);
-      }
-    }
-
-    if (!quiz?.quizQuestions || quiz.quizQuestions.length === 0) {
-      return userId ? this.getNextQuestionForUser(sessionId, userId) : null;
-    }
-
-    const questions = quiz.quizQuestions;
-    const currentIndex = questions.findIndex(
-      (qq: any) => qq.question?.questionId === currentQuestionId,
-    );
-
-    if (currentIndex !== -1) {
-      const nextIndex = currentIndex + 1;
-      if (nextIndex < questions.length) {
-        const nextQ = questions[nextIndex].question;
-        return {
-          questionId: nextQ.questionId,
-          title: nextQ.title,
-          type: nextQ.type,
-          options: nextQ.options,
-          points: nextQ.points,
-        };
-      }
-      return null; // Quiz finished
-    }
-
-    return userId ? this.getNextQuestionForUser(sessionId, userId) : null;
-  }
-
 }

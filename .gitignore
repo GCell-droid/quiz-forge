@@ -75,11 +75,3 @@ Redis_Server/.config
 # typescript
 Frontend/*.tsbuildinfo
 Frontend/next-env.d.ts
-# Added by agent
-**/*.spec.ts
-Backend/quizz.md
-Backend/TEACHER_NOTES.md
-Backend/prometheus.yml
-Backend/prothemus
-Backend/design.excalidraw
-Backend/sql/

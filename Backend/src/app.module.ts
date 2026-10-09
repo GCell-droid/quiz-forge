@@ -1,20 +1,19 @@
-import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
+import { Module } from '@nestjs/common';
 import { ScheduleModule } from '@nestjs/schedule';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { AuthModule } from './auth/auth.module';
-import { QuizGenerationAiModule } from './QuizGenerationAI/quiz-generation-ai.module';
+import { GeminiModule } from './gemini/gemini.module';
 import { ThrottlerModule } from '@nestjs/throttler';
 import { QuizzesModule } from './quizzes/quizzes.module';
 import { SessionsModule } from './sessions/sessions.module';
+import { AnalyticsModule } from './analytics/analytics.module';
 import { UsersModule } from './user/user.module';
 import { RedisModule } from './redis/redis.module';
 import { DashboardModule } from './dashboard/dashboard.module';
 import { BullModule } from '@nestjs/bullmq';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
-import { MetricsModule } from './metrics/metrics.module';
-import { MetricsMiddleware } from './metrics/metrics.middleware';
 
 @Module({
   imports: [
@@ -33,7 +32,7 @@ import { MetricsMiddleware } from './metrics/metrics.middleware';
         rejectUnauthorized: false,
       },
       autoLoadEntities: true,
-      synchronize: true,
+      // synchronize: true,
       // dropSchema: true,
     }),
     ScheduleModule.forRoot(),
@@ -45,42 +44,28 @@ import { MetricsMiddleware } from './metrics/metrics.middleware';
           configService.get<string>('REDIS_URL') ||
           'redis://localhost:6379';
         const parsedUrl = new URL(redisUrlString);
-        const isTls = parsedUrl.protocol === 'rediss:';
         return {
           connection: {
             host: parsedUrl.hostname,
             port: parseInt(parsedUrl.port, 10) || 6379,
-            username: parsedUrl.username
-              ? decodeURIComponent(parsedUrl.username)
-              : undefined,
             password: parsedUrl.password
               ? decodeURIComponent(parsedUrl.password)
               : undefined,
-            tls: isTls ? { rejectUnauthorized: false } : undefined,
-            maxRetriesPerRequest: null,
           },
         };
       },
       inject: [ConfigService],
     }),
     AuthModule,
-    QuizGenerationAiModule,
+    GeminiModule,
     QuizzesModule,
     SessionsModule,
+    AnalyticsModule,
     UsersModule,
     RedisModule,
     DashboardModule,
-    MetricsModule,
   ],
   controllers: [AppController],
   providers: [AppService],
 })
 export class AppModule {}
-// export class AppModule implements NestModule {
-//   configure(consumer: MiddlewareConsumer) {
-//     consumer
-//       .apply(MetricsMiddleware)
-//       .exclude('metrics', 'v1/metrics')
-//       .forRoutes('*');
-//   }
-// }

@@ -36,47 +36,45 @@ export class ResponseRepository {
     sessionId: string,
     userId: string,
   ): Promise<StoredAnswer[]> {
-    const responses = await this.responses.find({
-      where: { session: { sessionId }, user: { uid: userId } },
-      relations: ['question'],
-    });
-
-    return responses.map((r) => ({
-      questionId: r.question.questionId,
-      response: r.response,
-      isCorrect: r.isCorrect,
-      pointsScored: r.pointsScored,
-      timeTakenSecs: r.timeTakenSecs,
-    }));
+    return this.responses
+      .createQueryBuilder('qr')
+      .select('qr.questionId', 'questionId')
+      .addSelect('qr.response', 'response')
+      .addSelect('qr.isCorrect', 'isCorrect')
+      .addSelect('qr.pointsScored', 'pointsScored')
+      .addSelect('qr.timeTakenSecs', 'timeTakenSecs')
+      .where('qr.sessionId = :sessionId', { sessionId })
+      .andWhere('qr.userId = :userId', { userId })
+      .getRawMany<StoredAnswer>();
   }
 
   async findQuestionIdsForUser(
     sessionId: string,
     userId: string,
   ): Promise<string[]> {
-    const responses = await this.responses.find({
-      where: { session: { sessionId }, user: { uid: userId } },
-      relations: ['question'],
-    });
-    return responses.map((r) => r.question.questionId);
+    const rows = await this.responses
+      .createQueryBuilder('qr')
+      .select('qr.questionId', 'questionId')
+      .where('qr.sessionId = :sessionId', { sessionId })
+      .andWhere('qr.userId = :userId', { userId })
+      .getRawMany<{ questionId: string }>();
+    return rows.map((row) => row.questionId);
   }
 
-  async findForSession(sessionId: string): Promise<AnswerWithUser[]> {
-    const responses = await this.responses.find({
-      where: { session: { sessionId } },
-      relations: ['question', 'user'],
-    });
-
-    return responses.map((r) => ({
-      questionId: r.question.questionId,
-      response: r.response,
-      isCorrect: r.isCorrect,
-      pointsScored: r.pointsScored,
-      timeTakenSecs: r.timeTakenSecs,
-      userId: r.user.uid,
-      userName: r.user.name,
-      userEmail: r.user.email,
-    }));
+  findForSession(sessionId: string): Promise<AnswerWithUser[]> {
+    return this.responses
+      .createQueryBuilder('qr')
+      .innerJoin('qr.user', 'user')
+      .select('qr.questionId', 'questionId')
+      .addSelect('qr.response', 'response')
+      .addSelect('qr.isCorrect', 'isCorrect')
+      .addSelect('qr.pointsScored', 'pointsScored')
+      .addSelect('qr.timeTakenSecs', 'timeTakenSecs')
+      .addSelect('user.uid', 'userId')
+      .addSelect('user.name', 'userName')
+      .addSelect('user.email', 'userEmail')
+      .where('qr.sessionId = :sessionId', { sessionId })
+      .getRawMany<AnswerWithUser>();
   }
 
   async findHistory(
