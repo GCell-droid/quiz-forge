@@ -4,6 +4,7 @@ export interface AnswerJob {
   sessionId: string;
   questionId: string;
   userId: string;
+  userName?: string;
   response: string;
   timeTakenSecs: number;
 }

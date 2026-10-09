@@ -69,7 +69,9 @@ describe('QuizzesService creation', () => {
     const service = new QuizzesService(quizzes as never, {} as never);
     const update = { title: 'Renamed' } as never;
 
-    await expect(service.updateQuiz('teacher-1', 'quiz-1', update)).resolves.toEqual({ quizId: 'quiz-1' });
+    await expect(
+      service.updateQuiz('teacher-1', 'quiz-1', update),
+    ).resolves.toEqual({ quizId: 'quiz-1' });
     expect(quizzes.findOwnerId).toHaveBeenCalledWith('quiz-1');
     expect(quizzes.findById).not.toHaveBeenCalled();
   });

@@ -40,7 +40,7 @@ describe('ResponseRepository query shape', () => {
       .mockResolvedValue({ total: '0' });
     jest
       .spyOn(SelectQueryBuilder.prototype, 'getRawMany')
-      .mockImplementation(function (this: SelectQueryBuilder<unknown>) {
+      .mockImplementation(function (this: SelectQueryBuilder<any>) {
         querySql = this.getSql();
         return Promise.resolve([]);
       });

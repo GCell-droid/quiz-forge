@@ -16,9 +16,7 @@ import { AuthModule } from '../auth/auth.module';
 import { QuestionResponse } from './entities/question-response.entity/question-response.entity';
 import { AnswerSubmissionService } from './answer-submission.service';
 import { BullAnswerQueue } from './queue/bull-answer.queue';
-import { DefaultAnswerScorer } from './scoring/default-answer.scorer';
 import { ANSWER_QUEUE } from './ports/answer-queue.port';
-import { ANSWER_SCORER } from './ports/answer-scoring.port';
 import { SESSION_EVENTS } from './ports/session-events.port';
 import { SessionRepository } from './repositories/session.repository';
 import { ResponseRepository } from './repositories/response.repository';
@@ -49,9 +47,7 @@ import { UserPersistenceModule } from '../common/repositories/user-persistence.m
     AnswerSubmissionService,
     SessionGateway,
     BullAnswerQueue,
-    DefaultAnswerScorer,
     { provide: ANSWER_QUEUE, useExisting: BullAnswerQueue },
-    { provide: ANSWER_SCORER, useExisting: DefaultAnswerScorer },
     { provide: SESSION_EVENTS, useExisting: SessionGateway },
     QuizLifecycleProcessor,
     AnswerIngestionProcessor,

@@ -2,25 +2,22 @@
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import {
-  Field,
-  FieldGroup,
-  FieldLabel,
-} from "@/components/ui/field";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { QuestionType } from "@/lib/enums";
 import { CreateQuestionDto } from "@/lib/types";
 import { Trash2, GripVertical, Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Badge } from "@/components/ui/badge";
+
+export interface EditableQuestion extends CreateQuestionDto {
+  source?: "teacher_notes" | "general_knowledge";
+  explanation?: string;
+}
 
 interface QuestionEditorProps {
-  questions: CreateQuestionDto[];
-  onChange: (questions: CreateQuestionDto[]) => void;
+  questions: EditableQuestion[];
+  onChange: (questions: EditableQuestion[]) => void;
 }
 
 const emptyQuestion: CreateQuestionDto = {
@@ -40,8 +37,13 @@ export function QuestionEditor({ questions, onChange }: QuestionEditorProps) {
     ]);
   };
 
-  const updateQuestion = (index: number, updates: Partial<CreateQuestionDto>) => {
-    const updated = questions.map((q, i) => (i === index ? { ...q, ...updates } : q));
+  const updateQuestion = (
+    index: number,
+    updates: Partial<CreateQuestionDto>,
+  ) => {
+    const updated = questions.map((q, i) =>
+      i === index ? { ...q, ...updates } : q,
+    );
     onChange(updated);
   };
 
@@ -72,17 +74,17 @@ export function QuestionEditor({ questions, onChange }: QuestionEditorProps) {
     const opts = [...(q.options || [])];
     const oldOpt = opts[optIndex];
     opts[optIndex] = value;
-    
+
     const updates: Partial<CreateQuestionDto> = { options: opts };
-    
+
     // Keep the correct answer synced if this option was the selected one
     if (
-      q.correctAnswer === oldOpt || 
+      q.correctAnswer === oldOpt ||
       q.correctAnswer === `Option ${optIndex + 1}`
     ) {
       updates.correctAnswer = value || `Option ${optIndex + 1}`;
     }
-    
+
     updateQuestion(qIndex, updates);
   };
 
@@ -94,9 +96,7 @@ export function QuestionEditor({ questions, onChange }: QuestionEditorProps) {
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <GripVertical className="h-4 w-4 text-muted-foreground/50" />
-                <CardTitle className="text-base">
-                  Question {qi + 1}
-                </CardTitle>
+                <CardTitle className="text-base">Question {qi + 1}</CardTitle>
               </div>
               <Button
                 type="button"
@@ -111,13 +111,25 @@ export function QuestionEditor({ questions, onChange }: QuestionEditorProps) {
           </CardHeader>
 
           <CardContent>
+            {q.source === "teacher_notes" && (
+              <Badge variant="secondary" className="mb-3">
+                From your notes
+              </Badge>
+            )}
+            {q.explanation && (
+              <p className="mb-4 text-sm text-muted-foreground">
+                Original answer explanation: {q.explanation}
+              </p>
+            )}
             <FieldGroup>
               {/* Question text */}
               <Field>
                 <FieldLabel>Question Text</FieldLabel>
                 <Input
                   value={q.title}
-                  onChange={(e) => updateQuestion(qi, { title: e.target.value })}
+                  onChange={(e) =>
+                    updateQuestion(qi, { title: e.target.value })
+                  }
                   placeholder="Enter the question..."
                 />
               </Field>
@@ -152,7 +164,9 @@ export function QuestionEditor({ questions, onChange }: QuestionEditorProps) {
                     min={1}
                     value={q.points}
                     onChange={(e) =>
-                      updateQuestion(qi, { points: parseInt(e.target.value) || 1 })
+                      updateQuestion(qi, {
+                        points: parseInt(e.target.value) || 1,
+                      })
                     }
                   />
                 </Field>
@@ -164,16 +178,18 @@ export function QuestionEditor({ questions, onChange }: QuestionEditorProps) {
                   <FieldLabel>Options</FieldLabel>
                   <div className="space-y-2">
                     {q.options.map((opt, oi) => {
-                      const isSelected = 
-                        (q.correctAnswer === opt && opt !== "") || 
+                      const isSelected =
+                        (q.correctAnswer === opt && opt !== "") ||
                         (opt === "" && q.correctAnswer === `Option ${oi + 1}`);
-                        
+
                       return (
                         <div key={oi} className="flex items-center gap-2">
                           <button
                             type="button"
                             onClick={() =>
-                              updateQuestion(qi, { correctAnswer: opt || `Option ${oi + 1}` })
+                              updateQuestion(qi, {
+                                correctAnswer: opt || `Option ${oi + 1}`,
+                              })
                             }
                             className={cn(
                               "flex h-6 w-6 shrink-0 items-center justify-center rounded-full border-2 text-xs font-medium transition-all",
@@ -184,14 +200,16 @@ export function QuestionEditor({ questions, onChange }: QuestionEditorProps) {
                           >
                             {String.fromCharCode(65 + oi)}
                           </button>
-                        <Input
-                          value={opt}
-                          onChange={(e) => updateOption(qi, oi, e.target.value)}
-                          placeholder={`Option ${String.fromCharCode(65 + oi)}`}
-                          className="h-9"
-                          disabled={q.type === QuestionType.TRUE_FALSE}
-                        />
-                      </div>
+                          <Input
+                            value={opt}
+                            onChange={(e) =>
+                              updateOption(qi, oi, e.target.value)
+                            }
+                            placeholder={`Option ${String.fromCharCode(65 + oi)}`}
+                            className="h-9"
+                            disabled={q.type === QuestionType.TRUE_FALSE}
+                          />
+                        </div>
                       );
                     })}
                   </div>

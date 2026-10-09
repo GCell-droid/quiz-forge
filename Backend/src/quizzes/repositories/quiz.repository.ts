@@ -128,12 +128,23 @@ export class QuizRepository {
           points: data.points ?? 1,
         }),
       );
+      let displayOrder = data.displayOrder;
+      if (displayOrder === undefined || displayOrder === null) {
+        if (quiz.quizQuestions?.length !== undefined) {
+          displayOrder = quiz.quizQuestions.length + 1;
+        } else {
+          const count = await manager.count(QuizQuestion, {
+            where: { quiz: { quizId: quiz.quizId } },
+          });
+          displayOrder = count + 1;
+        }
+      }
+
       return manager.save(
         manager.create(QuizQuestion, {
           quiz,
           question,
-          displayOrder:
-            data.displayOrder ?? (quiz.quizQuestions?.length ?? 0) + 1,
+          displayOrder,
         }),
       );
     });

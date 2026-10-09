@@ -13,12 +13,16 @@ describe('AnswerSubmissionService', () => {
 
   const sessionRepo = {
     findByIdWithCreator: jest.fn(),
+    markCompleted: jest.fn(),
   };
   const sessionsService = {
     getNextQuestionForUser: jest.fn(),
+    isSessionExpired: jest.fn().mockReturnValue(false),
   };
   const redisService = {
     sadd: jest.fn(),
+    get: jest.fn().mockResolvedValue(null),
+    del: jest.fn(),
   };
   const answerQueue = {
     enqueue: jest.fn(),
@@ -33,6 +37,8 @@ describe('AnswerSubmissionService', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    redisService.get.mockResolvedValue(null);
+    sessionsService.isSessionExpired.mockReturnValue(false);
     sessionRepo.findByIdWithCreator.mockResolvedValue({
       status: SessionStatus.ACTIVE,
       createdBy: { uid: 'teacher-1' },
@@ -58,6 +64,7 @@ describe('AnswerSubmissionService', () => {
       status: SessionStatus.COMPLETED,
       createdBy: { uid: 'teacher-1' },
     });
+    sessionsService.isSessionExpired.mockReturnValue(true);
     await expect(service.submit(command)).rejects.toBeInstanceOf(
       BadRequestException,
     );

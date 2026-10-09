@@ -10,6 +10,8 @@ export class BullAnswerQueue implements AnswerQueue {
   async enqueue(answer: AnswerJob): Promise<void> {
     await this.queue.add('submit-answer', answer, {
       jobId: `answer-${answer.sessionId}-${answer.questionId}-${answer.userId}`,
+      removeOnComplete: true,
+      removeOnFail: { count: 100 },
     });
   }
 }

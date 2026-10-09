@@ -9,7 +9,9 @@ export interface ApiErrorResponse {
   requestId: string;
 }
 
-function isApiErrorResponse(value: unknown): value is ApiErrorResponse {
+function isApiErrorResponse(
+  value: unknown,
+): value is ApiErrorResponse {
   if (typeof value !== "object" || value === null) return false;
   const body = value as Record<string, unknown>;
   return (
@@ -22,7 +24,10 @@ function isApiErrorResponse(value: unknown): value is ApiErrorResponse {
   );
 }
 
-export function getApiErrorMessage(error: unknown, fallback: string): string {
+export function getApiErrorMessage(
+  error: unknown,
+  fallback: string,
+): string {
   if (!isAxiosError(error)) return fallback;
   const body: unknown = error.response?.data;
   if (
@@ -35,9 +40,14 @@ export function getApiErrorMessage(error: unknown, fallback: string): string {
   return body.message;
 }
 
-export function getSocketErrorMessage(response: unknown, fallback: string): string {
-  if (typeof response !== "object" || response === null) return fallback;
+export function getSocketErrorMessage(
+  response: unknown,
+  fallback: string,
+): string {
+  if (typeof response !== "object" || response === null)
+    return fallback;
   const result = response as Record<string, unknown>;
-  if (result.success !== false || !isApiErrorResponse(response)) return fallback;
+  if (result.success !== false || !isApiErrorResponse(response))
+    return fallback;
   return response.message.trim() || fallback;
 }

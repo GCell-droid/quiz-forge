@@ -51,8 +51,8 @@ export class BundlesService {
     bundleId: string,
     data: CreateQuestionDto,
   ) {
-    const bundle = await this.requireOwnedBundle(userId, bundleId);
-    return this.bundles.addQuestion(bundle, data);
+    await this.assertBundleOwner(userId, bundleId);
+    return this.bundles.addQuestion({ bundleId } as any, data);
   }
 
   async updateBundleQuestion(

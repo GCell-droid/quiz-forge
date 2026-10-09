@@ -159,11 +159,23 @@ export class BundleRepository {
           points: data.points ?? 1,
         }),
       );
+      let displayOrder = data.displayOrder;
+      if (displayOrder === undefined || displayOrder === null) {
+        if (bundle.questions?.length !== undefined) {
+          displayOrder = bundle.questions.length + 1;
+        } else {
+          const count = await manager.count(BundleQuestion, {
+            where: { bundle: { bundleId: bundle.bundleId } },
+          });
+          displayOrder = count + 1;
+        }
+      }
+
       return manager.save(
         manager.create(BundleQuestion, {
           bundle,
           question,
-          displayOrder: data.displayOrder ?? bundle.questions.length + 1,
+          displayOrder,
         }),
       );
     });
