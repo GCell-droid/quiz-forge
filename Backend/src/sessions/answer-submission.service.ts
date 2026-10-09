@@ -11,11 +11,13 @@ import type { AnswerQueue } from './ports/answer-queue.port';
 import { RedisService } from '../redis/redis.service';
 import { SessionsService } from './sessions.service';
 import { SessionRepository } from './repositories/session.repository';
+import { isSessionExpired } from './utils/session.util';
 
 export interface SubmitAnswerCommand {
   sessionId: string;
   questionId: string;
   userId: string;
+  userName?: string;
   response: string;
   timeTakenSecs: number;
 }
@@ -31,6 +33,7 @@ export class AnswerSubmissionService {
 
   async submit(
     command: SubmitAnswerCommand,
+    options?: { returnNextQuestion?: boolean; expectedQuestionId?: string },
   ): Promise<{ nextQuestion: unknown | null }> {
     const { sessionId, questionId, userId, response, timeTakenSecs } = command;
     if (
@@ -44,23 +47,70 @@ export class AnswerSubmissionService {
       throw new BadRequestException('Invalid answer');
     }
 
-    const session = await this.sessionRepo.findByIdWithCreator(sessionId);
-    if (!session) throw new NotFoundException('Session not found');
-    if (session.status !== SessionStatus.ACTIVE) {
+    const cachedDetailsStr = await this.redisService.get(`quiz:session:${sessionId}:details`);
+    let details = cachedDetailsStr ? JSON.parse(cachedDetailsStr) : null;
+
+    if (!details) {
+      const session = await this.sessionRepo.findByIdWithCreator(sessionId);
+      if (!session) throw new NotFoundException('Session not found');
+      
+      details = {
+        status: session.status,
+        creatorId: session.createdBy?.uid,
+        actualStart: session.actualStart,
+        scheduledStart: session.scheduledStart,
+        timeLimit: session.timeLimit,
+      };
+    }
+
+    const {
+      status: sessionStatus,
+      creatorId,
+      actualStart,
+      scheduledStart,
+      timeLimit
+    } = details;
+
+    const isExpired = isSessionExpired({
+      status: sessionStatus as SessionStatus,
+      actualStart,
+      scheduledStart,
+      timeLimit: timeLimit || 0,
+    });
+
+    if (isExpired) {
+      await Promise.all([
+        this.redisService.del(`quiz:session:${sessionId}:status`),
+        this.sessionRepo.markCompleted(sessionId),
+      ]);
+      throw new BadRequestException('Session has ended');
+    }
+
+    if (sessionStatus !== SessionStatus.ACTIVE) {
       throw new BadRequestException('Session is not active');
     }
-    if (session.createdBy?.uid === userId) {
+    if (creatorId === userId) {
       throw new ForbiddenException('Creators cannot submit answers');
     }
 
-    const currentQuestion = await this.sessionsService.getNextQuestionForUser(
-      sessionId,
-      userId,
-    );
-    if (!currentQuestion || currentQuestion.questionId !== questionId) {
-      throw new BadRequestException(
-        'Question is not the next unanswered question',
+    // Fast path: if the active connection tracks the expected question,
+    // validate directly in memory without hitting Redis (0ms, 0 Redis calls!)
+    if (options?.expectedQuestionId) {
+      if (options.expectedQuestionId !== questionId) {
+        throw new BadRequestException(
+          'Question is not the next unanswered question',
+        );
+      }
+    } else {
+      const currentQuestion = await this.sessionsService.getNextQuestionForUser(
+        sessionId,
+        userId,
       );
+      if (!currentQuestion || currentQuestion.questionId !== questionId) {
+        throw new BadRequestException(
+          'Question is not the next unanswered question',
+        );
+      }
     }
 
     await this.answerQueue.enqueue(command);
@@ -68,10 +118,15 @@ export class AnswerSubmissionService {
       `quiz:session:${sessionId}:answered:${userId}`,
       questionId,
     );
-    const nextQuestion = await this.sessionsService.getNextQuestionForUser(
-      sessionId,
-      userId,
-    );
+
+    let nextQuestion: unknown | null = null;
+    if (options?.returnNextQuestion !== false) {
+      nextQuestion = await this.sessionsService.getNextQuestionAfter(
+        sessionId,
+        questionId,
+        userId,
+      );
+    }
     return { nextQuestion };
   }
 }

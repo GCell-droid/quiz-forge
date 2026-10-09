@@ -49,15 +49,16 @@ export class SessionRepository {
     userId: string,
     options: PageOptions,
   ): Promise<Page<QuizSession>> {
-    const [items, total] = await this.sessions
-      .createQueryBuilder('session')
-      .leftJoinAndSelect('session.quiz', 'quiz')
-      .where('session.createdBy = :userId', { userId })
-      .orderBy('session.scheduledStart', 'DESC')
-      .addOrderBy('session.sessionId', 'DESC')
-      .skip((options.page - 1) * options.pageSize)
-      .take(options.pageSize)
-      .getManyAndCount();
+    const [items, total] = await this.sessions.findAndCount({
+      where: { createdBy: { uid: userId } },
+      relations: ['quiz'],
+      order: {
+        scheduledStart: 'DESC',
+        sessionId: 'DESC',
+      },
+      skip: (options.page - 1) * options.pageSize,
+      take: options.pageSize,
+    });
     return toPage(items, total, options);
   }
 
