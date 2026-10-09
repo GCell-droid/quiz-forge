@@ -418,11 +418,7 @@ export function NotesStorageModal({
       if (uploadState.result?.fileId === note.fileId) {
         setUploadState(initialUploadState);
       }
-      setSelectedIds((prev) => {
-        const next = new Set(prev);
-        next.delete(note.fileId);
-        return next;
-      });
+
     });
   }
 
