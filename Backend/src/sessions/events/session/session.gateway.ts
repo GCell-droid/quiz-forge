@@ -102,14 +102,14 @@ export class SessionGateway
   @UseGuards(WsJwtGuard)
   @SubscribeMessage('joinSession')
   async handleJoinSession(
-    @ConnectedSocket() client: Socket & { user?: any },
+    @ConnectedSocket() client: Socket,
     @MessageBody() data: { sessionId: string },
   ) {
     return this.recordWsMetric('joinSession', async () => {
       try {
         const result = await this.sessionsService.processJoinSession(
           data?.sessionId,
-          client.user?.userId,
+          client.data.user?.userId,
         );
 
         if (result.error || !result.data) {
@@ -157,11 +157,14 @@ export class SessionGateway
           }
         }
 
-        if (quizPayload) {
+        if (isCreator) {
+          client.data.isCreator = true;
+        }
+
+        if (quizPayload && !isCreator) {
           client.emit('quiz_started', quizPayload);
-          if (!isCreator && quizPayload.questions?.[0]?.questionId) {
-            (client as any).expectedQuestionId =
-              quizPayload.questions[0].questionId;
+          if (quizPayload.questions?.[0]?.questionId) {
+            client.data.expectedQuestionId = quizPayload.questions[0].questionId;
           }
         }
 
@@ -194,7 +197,7 @@ export class SessionGateway
   @UseGuards(WsJwtGuard)
   @SubscribeMessage('submitAnswer')
   async handleSubmitAnswer(
-    @ConnectedSocket() client: Socket & { user?: any },
+    @ConnectedSocket() client: Socket,
     @MessageBody()
     data: {
       sessionId: string;
@@ -220,7 +223,7 @@ export class SessionGateway
   @UseGuards(WsJwtGuard)
   @SubscribeMessage('submitAnswerAndGetNext')
   async handleSubmitAnswerAndGetNext(
-    @ConnectedSocket() client: Socket & { user?: any },
+    @ConnectedSocket() client: Socket,
     @MessageBody()
     data: {
       sessionId: string;
@@ -248,9 +251,7 @@ export class SessionGateway
   }
 
   private async submitAnswer(
-    client: Socket & {
-      user?: { userId: string; name?: string; email?: string };
-    },
+    client: Socket,
     data: {
       sessionId: string;
       questionId: string;
@@ -263,7 +264,10 @@ export class SessionGateway
     statusCode?: number;
     nextQuestion?: unknown | null;
   }> {
-    if (!client.user?.userId)
+    if (client.data.isCreator) {
+      return { error: 'Creators cannot submit answers', statusCode: HttpStatus.FORBIDDEN };
+    }
+    if (!client.data.user?.userId)
       return { error: 'Unauthorized', statusCode: HttpStatus.UNAUTHORIZED };
     if (!data?.sessionId || !client.rooms.has(`session_${data.sessionId}`)) {
       return {
@@ -273,26 +277,25 @@ export class SessionGateway
     }
     try {
       const userName =
-        client.user.name ||
-        (client.user.email ? client.user.email.split('@')[0] : undefined);
+        client.data.user.name ||
+        (client.data.user.email ? client.data.user.email.split('@')[0] : undefined);
+      
       const result = await this.answerSubmissionService.submit(
         {
           ...data,
-          userId: client.user.userId,
+          userId: client.data.user.userId,
           userName,
         },
         {
           ...options,
-          expectedQuestionId: (client as any).expectedQuestionId,
+          expectedQuestionId: client.data.expectedQuestionId,
         },
       );
 
       if (result.nextQuestion && (result.nextQuestion as any).questionId) {
-        (client as any).expectedQuestionId = (
-          result.nextQuestion as any
-        ).questionId;
+        client.data.expectedQuestionId = (result.nextQuestion as any).questionId;
       } else {
-        (client as any).expectedQuestionId = undefined;
+        client.data.expectedQuestionId = undefined;
       }
 
       return result;
@@ -313,11 +316,11 @@ export class SessionGateway
   @UseGuards(WsJwtGuard)
   @SubscribeMessage('requestNextQuestion')
   async handleRequestNextQuestion(
-    @ConnectedSocket() client: Socket & { user?: any },
+    @ConnectedSocket() client: Socket,
     @MessageBody() data: { sessionId: string },
   ) {
     return this.recordWsMetric('requestNextQuestion', async () => {
-      const actualUserId = client.user?.userId;
+      const actualUserId = client.data.user?.userId;
       if (!actualUserId)
         return this.socketError(
           HttpStatus.UNAUTHORIZED,
@@ -338,9 +341,9 @@ export class SessionGateway
       );
 
       if (nextQuestion && (nextQuestion as any).questionId) {
-        (client as any).expectedQuestionId = (nextQuestion as any).questionId;
+        client.data.expectedQuestionId = (nextQuestion as any).questionId;
       } else {
-        (client as any).expectedQuestionId = undefined;
+        client.data.expectedQuestionId = undefined;
       }
 
       return { success: true, nextQuestion };
@@ -384,21 +387,15 @@ export class SessionGateway
         ...event,
         questions: event.questions.slice(0, 1),
       });
-    this.server.to(teacherRoom).emit('quiz_started', event);
+    this.server.to(teacherRoom).emit('teacher_quiz_started', event);
 
     const firstQuestionId = event.questions?.[0]?.questionId;
     if (firstQuestionId) {
-      const roomSockets = (this.server as any)?.sockets?.adapter?.rooms?.get?.(
-        room,
-      );
-      if (roomSockets) {
-        for (const socketId of roomSockets) {
-          const s = (this.server as any)?.sockets?.sockets?.get?.(socketId);
-          if (s) {
-            s.expectedQuestionId = firstQuestionId;
-          }
-        }
-      }
+      this.server.in(room).fetchSockets().then((sockets) => {
+        sockets.forEach((s) => {
+          s.data.expectedQuestionId = firstQuestionId;
+        });
+      });
     }
   }
 
@@ -420,13 +417,7 @@ export class SessionGateway
 
   private async broadcastParticipantCount(sessionId: string) {
     const roomName = `session_${sessionId}`;
-    const adapterRoom = (this.server as any)?.sockets?.adapter?.rooms?.get(
-      roomName,
-    );
-    const count =
-      typeof adapterRoom?.size === 'number'
-        ? adapterRoom.size
-        : (await this.server.in(roomName).fetchSockets()).length;
+    const count = (await this.server.in(`session_${sessionId}`).fetchSockets()).length;
 
     this.broadcastToSession(sessionId, 'participant_count_updated', {
       count,

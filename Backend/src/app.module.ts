@@ -7,7 +7,6 @@ import { QuizGenerationAiModule } from './QuizGenerationAI/quiz-generation-ai.mo
 import { ThrottlerModule } from '@nestjs/throttler';
 import { QuizzesModule } from './quizzes/quizzes.module';
 import { SessionsModule } from './sessions/sessions.module';
-import { AnalyticsModule } from './analytics/analytics.module';
 import { UsersModule } from './user/user.module';
 import { RedisModule } from './redis/redis.module';
 import { DashboardModule } from './dashboard/dashboard.module';
@@ -68,7 +67,6 @@ import { MetricsMiddleware } from './metrics/metrics.middleware';
     QuizGenerationAiModule,
     QuizzesModule,
     SessionsModule,
-    AnalyticsModule,
     UsersModule,
     RedisModule,
     DashboardModule,
@@ -77,11 +75,12 @@ import { MetricsMiddleware } from './metrics/metrics.middleware';
   controllers: [AppController],
   providers: [AppService],
 })
-export class AppModule implements NestModule {
-  configure(consumer: MiddlewareConsumer) {
-    consumer
-      .apply(MetricsMiddleware)
-      .exclude('metrics', 'v1/metrics')
-      .forRoutes('*');
-  }
-}
+export class AppModule {}
+// export class AppModule implements NestModule {
+//   configure(consumer: MiddlewareConsumer) {
+//     consumer
+//       .apply(MetricsMiddleware)
+//       .exclude('metrics', 'v1/metrics')
+//       .forRoutes('*');
+//   }
+// }

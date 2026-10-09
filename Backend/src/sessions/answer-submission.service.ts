@@ -11,6 +11,7 @@ import type { AnswerQueue } from './ports/answer-queue.port';
 import { RedisService } from '../redis/redis.service';
 import { SessionsService } from './sessions.service';
 import { SessionRepository } from './repositories/session.repository';
+import { isSessionExpired } from './utils/session.util';
 
 export interface SubmitAnswerCommand {
   sessionId: string;
@@ -23,12 +24,6 @@ export interface SubmitAnswerCommand {
 
 @Injectable()
 export class AnswerSubmissionService {
-  private readonly sessionDetailsCache = new Map<
-    string,
-    { details: any; expiresAt: number }
-  >();
-  private readonly DETAILS_CACHE_TTL_MS = 5000; // 5 seconds
-
   constructor(
     private readonly sessionRepo: SessionRepository,
     private readonly sessionsService: SessionsService,
@@ -52,53 +47,31 @@ export class AnswerSubmissionService {
       throw new BadRequestException('Invalid answer');
     }
 
-    let sessionStatus: string | undefined;
-    let creatorId: string | undefined;
-    let actualStart: Date | string | undefined;
-    let scheduledStart: Date | string | undefined;
-    let timeLimit: number | undefined;
+    const cachedDetailsStr = await this.redisService.get(`quiz:session:${sessionId}:details`);
+    let details = cachedDetailsStr ? JSON.parse(cachedDetailsStr) : null;
 
-    let details: any = null;
-    const memCached = this.sessionDetailsCache.get(sessionId);
-    if (memCached && memCached.expiresAt > Date.now()) {
-      details = memCached.details;
-    } else {
-      const cachedDetailsStr = await this.redisService.get(
-        `quiz:session:${sessionId}:details`,
-      );
-
-      if (cachedDetailsStr) {
-        try {
-          details = JSON.parse(cachedDetailsStr);
-          this.sessionDetailsCache.set(sessionId, {
-            details,
-            expiresAt: Date.now() + this.DETAILS_CACHE_TTL_MS,
-          });
-        } catch {
-          // Fall back to database on parse failure
-        }
-      }
-    }
-
-    if (details) {
-      sessionStatus = details.status;
-      creatorId = details.creatorId;
-      actualStart = details.actualStart;
-      scheduledStart = details.scheduledStart;
-      timeLimit = details.timeLimit;
-    }
-
-    if (!sessionStatus) {
+    if (!details) {
       const session = await this.sessionRepo.findByIdWithCreator(sessionId);
       if (!session) throw new NotFoundException('Session not found');
-      sessionStatus = session.status;
-      creatorId = session.createdBy?.uid;
-      actualStart = session.actualStart;
-      scheduledStart = session.scheduledStart;
-      timeLimit = session.timeLimit;
+      
+      details = {
+        status: session.status,
+        creatorId: session.createdBy?.uid,
+        actualStart: session.actualStart,
+        scheduledStart: session.scheduledStart,
+        timeLimit: session.timeLimit,
+      };
     }
 
-    const isExpired = this.sessionsService.isSessionExpired({
+    const {
+      status: sessionStatus,
+      creatorId,
+      actualStart,
+      scheduledStart,
+      timeLimit
+    } = details;
+
+    const isExpired = isSessionExpired({
       status: sessionStatus as SessionStatus,
       actualStart,
       scheduledStart,
@@ -106,7 +79,6 @@ export class AnswerSubmissionService {
     });
 
     if (isExpired) {
-      this.sessionDetailsCache.delete(sessionId);
       await Promise.all([
         this.redisService.del(`quiz:session:${sessionId}:status`),
         this.sessionRepo.markCompleted(sessionId),
@@ -149,20 +121,11 @@ export class AnswerSubmissionService {
 
     let nextQuestion: unknown | null = null;
     if (options?.returnNextQuestion !== false) {
-      if (
-        typeof (this.sessionsService as any).getNextQuestionAfter === 'function'
-      ) {
-        nextQuestion = await (this.sessionsService as any).getNextQuestionAfter(
-          sessionId,
-          questionId,
-          userId,
-        );
-      } else {
-        nextQuestion = await this.sessionsService.getNextQuestionForUser(
-          sessionId,
-          userId,
-        );
-      }
+      nextQuestion = await this.sessionsService.getNextQuestionAfter(
+        sessionId,
+        questionId,
+        userId,
+      );
     }
     return { nextQuestion };
   }

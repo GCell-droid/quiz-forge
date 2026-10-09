@@ -27,7 +27,7 @@ export class WsJwtGuard implements CanActivate {
     const pattern = ws.getPattern?.() || 'auth';
 
     // Fast-path: client already authenticated via HTTP connection handshake
-    if ((client as any).user?.userId) {
+    if (client.data.user?.userId) {
       return true;
     }
 
@@ -35,7 +35,7 @@ export class WsJwtGuard implements CanActivate {
   }
 
   public authenticateClient(client: Socket, pattern: string = 'auth'): boolean {
-    if ((client as any).user?.userId) {
+    if (client.data.user?.userId) {
       return true;
     }
 
@@ -81,7 +81,7 @@ export class WsJwtGuard implements CanActivate {
       const payload = this.jwtService.verify(token, { secret: jwtSecret });
 
       // Attach user object to socket client so all subsequent guarded events take the instant fast-path
-      (client as any).user = {
+      client.data.user = {
         userId: payload.sub,
         email: payload.email,
         role: payload.role,

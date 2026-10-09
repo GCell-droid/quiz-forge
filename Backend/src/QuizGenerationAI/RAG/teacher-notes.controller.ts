@@ -26,6 +26,8 @@ interface TeacherIdentity {
   userId: string;
 }
 
+const MAX_NOTE_BYTES = 10 * 1024 * 1024; // 20 MB
+
 @Controller('teacher-notes')
 @UseGuards(jwtAuthGuard, RoleGuard)
 @Roles(UserRole.TEACHER)
@@ -49,7 +51,7 @@ export class TeacherNotesController {
   @Post()
   @UseGuards(GeminiThrottle)
   @UseInterceptors(
-    FileInterceptor('file', { limits: { fileSize: 20 * 1024 * 1024, files: 1 } }),
+    FileInterceptor('file', { limits: { fileSize: MAX_NOTE_BYTES, files: 1 } }),
   )
   upload(
     @CurrentUser() user: TeacherIdentity,
