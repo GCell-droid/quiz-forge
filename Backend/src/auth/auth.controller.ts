@@ -35,8 +35,9 @@ export class AuthController {
   @Get('/google/callback')
   googleCallback(@Req() req: Request, @Res() res: Response) {
     const { tokens, needsRole, message } = req.user as any;
-    const frontendUrl =
+    const rawFrontendUrl =
       this.configService.get<string>('FRONTEND_URL') || 'http://localhost:3000';
+    const frontendUrl = rawFrontendUrl.replace(/\/$/, '');
     if (tokens) {
       this.authService.setAuthCookies(tokens, res);
     }

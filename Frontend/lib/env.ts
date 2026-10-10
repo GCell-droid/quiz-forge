@@ -5,4 +5,7 @@ if (!backendUrl) {
 }
 
 export const BACKEND_URL = backendUrl;
-export const API_V1_URL = `${backendUrl.replace(/\/$/, "")}/v1`;
+export const API_V1_URL =
+  backendUrl === "/api"
+    ? "/api/v1"
+    : `${backendUrl.replace(/\/$/, "")}/v1`;
