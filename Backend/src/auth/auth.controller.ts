@@ -33,10 +33,7 @@ export class AuthController {
   googleSignIn() {}
   @UseGuards(AuthGuard('google'))
   @Get('/google/callback')
-  googleCallback(
-    @Req() req: Request,
-    @Res({ passthrough: true }) res: Response,
-  ) {
+  googleCallback(@Req() req: Request, @Res() res: Response) {
     const { tokens, needsRole, message } = req.user as any;
     const frontendUrl =
       this.configService.get<string>('FRONTEND_URL') || 'http://localhost:3000';
