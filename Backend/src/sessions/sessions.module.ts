@@ -4,8 +4,6 @@ import { SessionsController } from './sessions.controller';
 import { SessionsService } from './sessions.service';
 import { SessionGateway } from './events/session/session.gateway';
 import { QuizSession } from './entities/quiz-session.entity/quiz-session.entity';
-import { QuizParticipant } from './entities/quiz-participant.entity/quiz-participant.entity';
-import { QuizInvite } from './entities/quiz-invite.entity/quiz-invite.entity';
 import { BullModule } from '@nestjs/bullmq';
 import { QuizzesModule } from '../quizzes/quizzes.module';
 import { QuizLifecycleProcessor } from './processors/quiz-lifecycle.processor';
@@ -24,13 +22,7 @@ import { UserPersistenceModule } from '../common/repositories/user-persistence.m
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([
-      QuizSession,
-      QuizParticipant,
-      QuizInvite,
-      Question,
-      QuestionResponse,
-    ]),
+    TypeOrmModule.forFeature([QuizSession, Question, QuestionResponse]),
     BullModule.registerQueue(
       { name: 'quiz-lifecycle' },
       { name: 'answer-ingestion' },

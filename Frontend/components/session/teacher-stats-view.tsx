@@ -132,6 +132,7 @@ export function TeacherStatsView({ quizData, answers, participantCount, isLive =
                 <ResponsiveContainer width="100%" height={420}>
                   <PieChart>
                     <Pie
+                      key={JSON.stringify(chartData)}
                       data={chartData}
                       cx="50%"
                       cy="45%"
