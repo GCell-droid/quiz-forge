@@ -16,11 +16,11 @@ import { QuizGenerationService } from './quiz-generation.service';
 import { GenerateQuizDto } from './DTOs/generate-quiz.dto';
 import { RoleGuard } from 'src/auth/guards/roles-guard/roles.guard';
 import { Roles } from 'src/auth/decorators/roles.decorator';
-import { GeminiThrottle } from './Guards/gemini-throttle.guard';
 import { UserRole } from 'src/common/enums/enum';
 import { jwtAuthGuard } from 'src/auth/guards/jwtguard/jwt-auth.guard';
 import { CurrentUser } from 'src/auth/decorators/currentUser.decorator';
 
+import { GeminiThrottle } from './guards/gemini-throttle.guard';
 import { RagPipelineService } from './RAG/rag-pipeline.service';
 
 @Controller('quiz-generations')

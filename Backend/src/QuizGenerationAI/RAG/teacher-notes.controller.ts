@@ -18,7 +18,7 @@ import { Roles } from 'src/auth/decorators/roles.decorator';
 import { jwtAuthGuard } from 'src/auth/guards/jwtguard/jwt-auth.guard';
 import { RoleGuard } from 'src/auth/guards/roles-guard/roles.guard';
 import { UserRole } from 'src/common/enums/enum';
-import { GeminiThrottle } from '../Guards/gemini-throttle.guard';
+import { GeminiThrottle } from '../guards/gemini-throttle.guard';
 import { RagPipelineService } from './rag-pipeline.service';
 import { BatchDeleteNotesDto } from '../DTOs/batch-delete-notes.dto';
 
