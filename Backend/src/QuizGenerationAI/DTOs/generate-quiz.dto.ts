@@ -35,6 +35,10 @@ export class GenerateQuizDto {
   fileIds?: string[];
 
   @IsOptional()
+  @IsUUID('all')
+  fileId?: string;
+
+  @IsOptional()
   @Transform(({ value }) => (value === '' ? undefined : value))
   @IsString()
   @MaxLength(100)

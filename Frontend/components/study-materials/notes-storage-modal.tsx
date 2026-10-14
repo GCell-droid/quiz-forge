@@ -771,18 +771,7 @@ export function NotesStorageModal({
                         className="h-8 text-xs bg-emerald-600 hover:bg-emerald-700 text-white gap-1"
                         onClick={() => {
                           if (uploadState.result) {
-                            if (
-                              !selectedNotes.some(
-                                (n) =>
-                                  n.fileId ===
-                                  uploadState.result!.fileId,
-                              )
-                            ) {
-                              onSelectNotes([
-                                ...selectedNotes,
-                                uploadState.result,
-                              ]);
-                            }
+                            onSelectNotes([uploadState.result]);
                           }
                           onClose();
                         }}
@@ -1126,7 +1115,7 @@ export function NotesStorageModal({
               onClose();
             }}
           >
-            Use All Saved Notes for Quiz
+            Clear selection (Pure AI)
           </Button>
           <Button
             type="button"

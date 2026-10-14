@@ -1,6 +1,6 @@
 import { AnswerIngestionProcessor } from './answer-ingestion.processor';
 import { Job } from 'bullmq';
-import { AnswerJob } from '../ports/answer-queue.port';
+import { AnswerJob } from '../interface/answer-queue.interface';
 
 describe('AnswerIngestionProcessor', () => {
   let processor: AnswerIngestionProcessor;

@@ -1,6 +1,8 @@
 import {
   BadGatewayException,
   BadRequestException,
+  HttpException,
+  HttpStatus,
   Injectable,
   Logger,
   ServiceUnavailableException,
@@ -34,8 +36,9 @@ export class QuizGenerationService {
         errMsg.includes('RESOURCE_EXHAUSTED');
 
       if (isQuota) {
-        throw new ServiceUnavailableException(
+        throw new HttpException(
           'AI rate limit reached. Please wait a few seconds and try again.',
+          HttpStatus.TOO_MANY_REQUESTS,
         );
       }
 

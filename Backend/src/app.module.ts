@@ -33,7 +33,7 @@ import { MetricsMiddleware } from './metrics/metrics.middleware';
         rejectUnauthorized: false,
       },
       autoLoadEntities: true,
-      synchronize: true,
+      synchronize: false,
       // dropSchema: true,
     }),
     ScheduleModule.forRoot(),

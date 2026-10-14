@@ -24,7 +24,7 @@ import {
   AnswerSubmittedEvent,
   QuizStartedEvent,
   SessionEvents,
-} from '../../ports/session-events.port';
+} from '../../interface/session-events.interface';
 
 @WebSocketGateway({
   cors: {
@@ -164,7 +164,8 @@ export class SessionGateway
         if (quizPayload && !isCreator) {
           client.emit('quiz_started', quizPayload);
           if (quizPayload.questions?.[0]?.questionId) {
-            client.data.expectedQuestionId = quizPayload.questions[0].questionId;
+            client.data.expectedQuestionId =
+              quizPayload.questions[0].questionId;
           }
         }
 
@@ -265,7 +266,10 @@ export class SessionGateway
     nextQuestion?: unknown | null;
   }> {
     if (client.data.isCreator) {
-      return { error: 'Creators cannot submit answers', statusCode: HttpStatus.FORBIDDEN };
+      return {
+        error: 'Creators cannot submit answers',
+        statusCode: HttpStatus.FORBIDDEN,
+      };
     }
     if (!client.data.user?.userId)
       return { error: 'Unauthorized', statusCode: HttpStatus.UNAUTHORIZED };
@@ -278,8 +282,10 @@ export class SessionGateway
     try {
       const userName =
         client.data.user.name ||
-        (client.data.user.email ? client.data.user.email.split('@')[0] : undefined);
-      
+        (client.data.user.email
+          ? client.data.user.email.split('@')[0]
+          : undefined);
+
       const result = await this.answerSubmissionService.submit(
         {
           ...data,
@@ -293,7 +299,9 @@ export class SessionGateway
       );
 
       if (result.nextQuestion && (result.nextQuestion as any).questionId) {
-        client.data.expectedQuestionId = (result.nextQuestion as any).questionId;
+        client.data.expectedQuestionId = (
+          result.nextQuestion as any
+        ).questionId;
       } else {
         client.data.expectedQuestionId = undefined;
       }
@@ -391,11 +399,14 @@ export class SessionGateway
 
     const firstQuestionId = event.questions?.[0]?.questionId;
     if (firstQuestionId) {
-      this.server.in(room).fetchSockets().then((sockets) => {
-        sockets.forEach((s) => {
-          s.data.expectedQuestionId = firstQuestionId;
+      this.server
+        .in(room)
+        .fetchSockets()
+        .then((sockets) => {
+          sockets.forEach((s) => {
+            s.data.expectedQuestionId = firstQuestionId;
+          });
         });
-      });
     }
   }
 
@@ -417,7 +428,8 @@ export class SessionGateway
 
   private async broadcastParticipantCount(sessionId: string) {
     const roomName = `session_${sessionId}`;
-    const count = (await this.server.in(`session_${sessionId}`).fetchSockets()).length;
+    const count = (await this.server.in(`session_${sessionId}`).fetchSockets())
+      .length;
 
     this.broadcastToSession(sessionId, 'participant_count_updated', {
       count,

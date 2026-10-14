@@ -4,8 +4,8 @@ import { Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { SessionStatus } from '../entities/quiz-session.entity/quiz-session.entity';
 import { QuizzesService } from '../../quizzes/quizzes.service';
 import { RedisService } from '../../redis/redis.service';
-import { SESSION_EVENTS } from '../ports/session-events.port';
-import type { SessionEvents } from '../ports/session-events.port';
+import { SESSION_EVENTS } from '../interface/session-events.interface';
+import type { SessionEvents } from '../interface/session-events.interface';
 import { SessionRepository } from '../repositories/session.repository';
 
 @Processor('quiz-lifecycle')
@@ -123,9 +123,9 @@ export class QuizLifecycleProcessor extends WorkerHost {
         timeLimit: session.timeLimit,
       });
 
-      console.log(
-        `[Go-Live] Started session: ${sessionId} and broadcasted event`,
-      );
+      // console.log(
+      //   `[Go-Live] Started session: ${sessionId} and broadcasted event`,
+      // );
     } else if (job.name === 'end-session') {
       // 1. Update session status to COMPLETED in database
       session.status = SessionStatus.COMPLETED;
@@ -158,9 +158,9 @@ export class QuizLifecycleProcessor extends WorkerHost {
         this.sessionEvents.disconnectSession(sessionId);
       }, 3000);
 
-      console.log(
-        `[End-Session] Automatically terminated session: ${sessionId}`,
-      );
+      // console.log(
+      //   `[End-Session] Automatically terminated session: ${sessionId}`,
+      // );
     }
   }
 }

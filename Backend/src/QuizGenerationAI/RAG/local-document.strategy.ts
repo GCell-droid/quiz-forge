@@ -34,7 +34,9 @@ export class LocalDocumentStrategy implements DocumentProcessorStrategy {
 
     const trimmed = text.trim();
     if (!trimmed) {
-      throw new BadRequestException('Could not extract sufficient text from the document.');
+      throw new BadRequestException(
+        'Could not extract sufficient text from the document.',
+      );
     }
 
     const chunks = await this.splitter.splitText(trimmed);

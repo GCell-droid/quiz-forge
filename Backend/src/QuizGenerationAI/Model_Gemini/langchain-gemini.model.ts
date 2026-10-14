@@ -56,27 +56,50 @@ export class LangChainGeminiModel extends AiModel {
 
     const schema = createModelQuizSchema(expectedSource);
 
-    const callModel = async (instructions: string) => {
-      return (await quizPrompt
-        .pipe(this.model.withStructuredOutput(schema))
-        .invoke({
-          ...request,
-          expectedSource,
-          sourceInstructions: instructions,
-          gradeLevel: request.gradeLevel || 'Appropriate for the topic',
-          context: request.context || 'No study excerpts supplied.',
-        })) as {
-        title?: string;
-        description?: string;
-        questions?: Array<{
-          id: number;
-          question: string;
-          options: { A: string; B: string; C: string; D: string };
-          correctAnswer: 'A' | 'B' | 'C' | 'D';
-          explanation: string;
-          source: 'teacher_notes' | 'general_knowledge';
-        }>;
-      };
+    const callModel = async (instructions: string, maxAttempts = 3) => {
+      for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+        try {
+          return (await quizPrompt
+            .pipe(this.model.withStructuredOutput(schema))
+            .invoke({
+              ...request,
+              expectedSource,
+              sourceInstructions: instructions,
+              gradeLevel: request.gradeLevel || 'Appropriate for the topic',
+              context: request.context || 'No study excerpts supplied.',
+            })) as {
+            title?: string;
+            description?: string;
+            questions?: Array<{
+              id: number;
+              question: string;
+              options: { A: string; B: string; C: string; D: string };
+              correctAnswer: 'A' | 'B' | 'C' | 'D';
+              explanation: string;
+              source: 'teacher_notes' | 'general_knowledge';
+            }>;
+          };
+        } catch (error: unknown) {
+          const errMsg = (
+            error instanceof Error ? error.message : String(error)
+          ).toLowerCase();
+          const isRateLimit =
+            errMsg.includes('429') ||
+            errMsg.includes('resource_exhausted') ||
+            errMsg.includes('quota') ||
+            errMsg.includes('too many requests');
+
+          if (isRateLimit && attempt < maxAttempts) {
+            const delayMs = attempt * 2500 + Math.floor(Math.random() * 500);
+            this.logger.warn(
+              `Gemini rate limit / quota hit (attempt ${attempt}/${maxAttempts}). Retrying in ${delayMs}ms...`,
+            );
+            await new Promise((resolve) => setTimeout(resolve, delayMs));
+            continue;
+          }
+          throw error;
+        }
+      }
     };
 
     let result = await callModel(sourceInstructions);

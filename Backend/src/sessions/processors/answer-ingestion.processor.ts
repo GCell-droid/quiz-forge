@@ -7,9 +7,9 @@ import { RedisService } from '../../redis/redis.service';
 import { QuizzesService } from '../../quizzes/quizzes.service';
 
 import { scoreAnswer } from '../utils/scoring.util';
-import { AnswerJob } from '../ports/answer-queue.port';
-import { SESSION_EVENTS } from '../ports/session-events.port';
-import type { SessionEvents } from '../ports/session-events.port';
+import { AnswerJob } from '../interface/answer-queue.interface';
+import { SESSION_EVENTS } from '../interface/session-events.interface';
+import type { SessionEvents } from '../interface/session-events.interface';
 import { Question } from '../../quizzes/entities/question.entity/question.entity';
 import { SessionRepository } from '../repositories/session.repository';
 import { ResponseRepository } from '../repositories/response.repository';

@@ -197,10 +197,11 @@ export default function AIGeneratePage() {
               ) : (
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 rounded-lg border border-dashed p-3 text-xs text-muted-foreground">
                   <div className="flex items-center gap-2">
-                    <Badge variant="secondary" className="text-[11px] font-normal shrink-0">
-                      All Saved Notes
+                    <Badge variant="outline" className="text-[11px] font-normal shrink-0 gap-1 text-primary border-primary/30">
+                      <Sparkles className="h-3 w-3" />
+                      Gemini AI Mode
                     </Badge>
-                    <span>Searching across all ready notes in your storage for relevant concepts.</span>
+                    <span>No document selected. Quiz will be generated using Gemini AI from your topic.</span>
                   </div>
                   <Button
                     type="button"
@@ -247,7 +248,9 @@ export default function AIGeneratePage() {
                       placeholder="e.g., Photosynthesis and plant growth"
                     />
                     <p className="text-xs text-muted-foreground">
-                      Relevant saved notes will guide your quiz questions.
+                      {selectedNotes.length > 0
+                        ? "Questions will be grounded strictly in your selected document(s)."
+                        : "Questions will be generated using Gemini AI from your topic."}
                     </p>
                   </Field>
                   <Field>

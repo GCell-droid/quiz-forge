@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
-import { AnswerJob, AnswerQueue } from '../ports/answer-queue.port';
+import { AnswerJob, AnswerQueue } from '../interface/answer-queue.interface';
 
 @Injectable()
 export class BullAnswerQueue implements AnswerQueue {

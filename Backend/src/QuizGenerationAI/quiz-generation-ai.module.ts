@@ -1,6 +1,6 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { TeacherNote } from './RAG/note.entity';
+import { TeacherNote } from './Entity/note.entity';
 import { TeacherNotesController } from './RAG/teacher-notes.controller';
 import { QuizGenerationAiController } from './quiz-generation-ai.controller';
 import { QuizGenerationService } from './quiz-generation.service';

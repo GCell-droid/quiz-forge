@@ -16,7 +16,7 @@ import { QuizGenerationService } from './quiz-generation.service';
 import { GenerateQuizDto } from './DTOs/generate-quiz.dto';
 import { RoleGuard } from 'src/auth/guards/roles-guard/roles.guard';
 import { Roles } from 'src/auth/decorators/roles.decorator';
-import { GeminiThrottle } from './guards/gemini-throttle.guard';
+import { GeminiThrottle } from './Guards/gemini-throttle.guard';
 import { UserRole } from 'src/common/enums/enum';
 import { jwtAuthGuard } from 'src/auth/guards/jwtguard/jwt-auth.guard';
 import { CurrentUser } from 'src/auth/decorators/currentUser.decorator';
@@ -50,27 +50,36 @@ export class QuizGenerationAiController {
     const topic =
       dto.topic?.trim() ||
       (file ? `Key concepts from ${file.originalname}` : '') ||
-      (dto.fileIds && dto.fileIds.length > 0 ? 'Main ideas and key concepts from the provided documents' : '');
-      
+      (dto.fileIds && dto.fileIds.length > 0
+        ? 'Main ideas and key concepts from the provided documents'
+        : '');
+
     if (topic.length < 3)
       throw new BadRequestException(
         'Please enter a topic of at least 3 characters.',
       );
     const numQuestions = dto.questionCount ?? dto.numQuestions ?? 5;
     let fileIds: string[] = [];
-    if (dto.fileIds && dto.fileIds.length > 0) fileIds = [...dto.fileIds];
-    
+    if (dto.fileIds && dto.fileIds.length > 0) {
+      fileIds = [...dto.fileIds];
+    } else if (dto.fileId) {
+      fileIds = [dto.fileId];
+    }
+
     if (file) {
       const ingested = await this.notes.ingestDocument(file, teacherId);
       fileIds.push(ingested.fileId);
     }
 
-    const retrieval = await this.notes.retrieveContext(
-      topic,
-      teacherId,
-      numQuestions,
-      fileIds.length > 0 ? fileIds : undefined,
-    );
+    let retrieval = { validChunkCount: 0, context: '' };
+    if (fileIds.length > 0) {
+      retrieval = await this.notes.retrieveContext(
+        topic,
+        teacherId,
+        numQuestions,
+        fileIds,
+      );
+    }
     return this.quizGenerator.generate({
       topic,
       numQuestions,

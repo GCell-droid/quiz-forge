@@ -6,8 +6,8 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { SessionStatus } from './entities/quiz-session.entity/quiz-session.entity';
-import { ANSWER_QUEUE } from './ports/answer-queue.port';
-import type { AnswerQueue } from './ports/answer-queue.port';
+import { ANSWER_QUEUE } from './interface/answer-queue.interface';
+import type { AnswerQueue } from './interface/answer-queue.interface';
 import { RedisService } from '../redis/redis.service';
 import { SessionsService } from './sessions.service';
 import { SessionRepository } from './repositories/session.repository';
@@ -47,13 +47,15 @@ export class AnswerSubmissionService {
       throw new BadRequestException('Invalid answer');
     }
 
-    const cachedDetailsStr = await this.redisService.get(`quiz:session:${sessionId}:details`);
+    const cachedDetailsStr = await this.redisService.get(
+      `quiz:session:${sessionId}:details`,
+    );
     let details = cachedDetailsStr ? JSON.parse(cachedDetailsStr) : null;
 
     if (!details) {
       const session = await this.sessionRepo.findByIdWithCreator(sessionId);
       if (!session) throw new NotFoundException('Session not found');
-      
+
       details = {
         status: session.status,
         creatorId: session.createdBy?.uid,
@@ -68,7 +70,7 @@ export class AnswerSubmissionService {
       creatorId,
       actualStart,
       scheduledStart,
-      timeLimit
+      timeLimit,
     } = details;
 
     const isExpired = isSessionExpired({

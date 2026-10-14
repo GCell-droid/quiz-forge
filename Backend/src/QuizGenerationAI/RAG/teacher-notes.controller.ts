@@ -18,7 +18,7 @@ import { Roles } from 'src/auth/decorators/roles.decorator';
 import { jwtAuthGuard } from 'src/auth/guards/jwtguard/jwt-auth.guard';
 import { RoleGuard } from 'src/auth/guards/roles-guard/roles.guard';
 import { UserRole } from 'src/common/enums/enum';
-import { GeminiThrottle } from '../guards/gemini-throttle.guard';
+import { GeminiThrottle } from '../Guards/gemini-throttle.guard';
 import { RagPipelineService } from './rag-pipeline.service';
 import { BatchDeleteNotesDto } from '../DTOs/batch-delete-notes.dto';
 
@@ -26,7 +26,7 @@ interface TeacherIdentity {
   userId: string;
 }
 
-const MAX_NOTE_BYTES = 10 * 1024 * 1024; // 20 MB
+const MAX_NOTE_BYTES = 10 * 1024 * 1024; // 10 MB
 
 @Controller('teacher-notes')
 @UseGuards(jwtAuthGuard, RoleGuard)
